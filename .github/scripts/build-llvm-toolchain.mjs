@@ -125,6 +125,7 @@ const cFlags = cleanFlags(`
 const exeLinkerFlags = cleanFlags(`
   -Oz
   -Wl,--gc-sections
+  -Wl,--icf=all
   -Wl,--compress-relocations
   -mbulk-memory
   -mextended-const
@@ -155,6 +156,7 @@ const exeLinkerFlags = cleanFlags(`
 run(`
   emcmake cmake -G Ninja -B build-wasm -S llvm
     -DCMAKE_BUILD_TYPE=MinSizeRel
+    -DLLVM_ENABLE_ASSERTIONS=OFF
     -DLLVM_ENABLE_PROJECTS="clang;lld"
     -DLLVM_TARGETS_TO_BUILD="WebAssembly"
     -DLLVM_DEFAULT_TARGET_TRIPLE="wasm32-unknown-emscripten"
