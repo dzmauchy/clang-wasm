@@ -1,0 +1,85 @@
+name: Build and release LLVM toolchain
+
+on:
+  workflow_dispatch:
+    inputs:
+      llvm_version:
+        description: 'LLVM version tag (without "llvmorg-" prefix)'
+        required: true
+        default: '23.1.2'
+        type: string
+
+concurrency:
+  group: llvm-toolchain-release
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Enable Clang 22 as default
+        run: |
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100
+          sudo update-alternatives --set clang /usr/bin/clang-22
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-22 100
+          sudo update-alternatives --set clang++ /usr/bin/clang++-22
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-22 100
+          sudo update-alternatives --set clang-format /usr/bin/clang-format-22
+          
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-22 100
+          sudo update-alternatives --set ld.lld /usr/bin/ld.lld-22
+          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-22 100
+          sudo update-alternatives --set lld /usr/bin/lld-22
+          
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-22 100
+          sudo update-alternatives --set cc /usr/bin/clang-22
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-22 100
+          sudo update-alternatives --set c++ /usr/bin/clang++-22
+          sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.lld-22 100
+          sudo update-alternatives --set ld /usr/bin/ld.lld-22
+          
+          echo "CC=clang-22" >> "$GITHUB_ENV"
+          echo "CXX=clang++-22" >> "$GITHUB_ENV"
+          echo "LD=ld.lld-22" >> "$GITHUB_ENV"
+      - name: Check out LLVM ${{ inputs.llvm_version }}
+        uses: actions/checkout@v7
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-${{ inputs.llvm_version }}
+          fetch-depth: 1
+          path: llvm-project
+
+      - name: Setup emsdk
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 6.0.9
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Build Clang, LLD and sysroot
+        working-directory: llvm-project
+        run: node ../.github/scripts/build-llvm-toolchain.mjs
+
+      - name: Publish GitHub Release
+        working-directory: llvm-project
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: clang-${{ inputs.llvm_version }}
+        run: |
+          assets=(dist/clang.js dist/clang.wasm dist/lld.js dist/lld.wasm dist/sysroot.tgz)
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG_NAME" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "Creating release $TAG_NAME..."
+          gh release create "$TAG_NAME" "${assets[@]}" \
+            --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "LLVM $TAG_NAME" \
+            --notes "LLVM toolchain WebAssembly binaries built from llvmorg-${{ inputs.llvm_version }}." \
+            --repo "$GITHUB_REPOSITORY"
