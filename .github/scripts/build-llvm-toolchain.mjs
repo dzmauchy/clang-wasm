@@ -125,7 +125,7 @@ const cFlags = cleanFlags(`
 const exeLinkerFlags = cleanFlags(`
   -Oz
   -Wl,--gc-sections
-  -Wl,--icf=all
+  -Wl,-O3
   -Wl,--compress-relocations
   -mbulk-memory
   -mextended-const
