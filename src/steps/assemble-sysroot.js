@@ -38,11 +38,11 @@ export function assembleSysroot(config) {
     throw new Error("Clang resource header directory not found!");
   }
 
-  const stageLibWasm = path.join(config.stageDir, "lib/wasm32-emscripten");
+  const stageLibTarget = path.join(config.stageDir, "lib/target");
   const stageLibClang = path.join(config.stageDir, "lib/clang");
 
   fs.rmSync(config.stageDir, { recursive: true, force: true });
-  fs.mkdirSync(stageLibWasm, { recursive: true });
+  fs.mkdirSync(stageLibTarget, { recursive: true });
   fs.mkdirSync(stageLibClang, { recursive: true });
 
   fs.cpSync(
@@ -57,20 +57,24 @@ export function assembleSysroot(config) {
   );
   if (fs.existsSync(sysLibDir)) {
     for (const file of fs.readdirSync(sysLibDir)) {
-      if (file.endsWith(".a") || file.endsWith(".o")) {
+      if (
+        (file.endsWith(".a") || file.endsWith(".o")) &&
+        !config.libPrunePattern.test(file) &&
+        !file.endsWith("-wasmexcept.a")
+      ) {
         fs.copyFileSync(
           path.join(sysLibDir, file),
-          path.join(stageLibWasm, file)
+          path.join(stageLibTarget, file)
         );
       }
     }
   }
 
   const filesToStrip = fs
-    .readdirSync(stageLibWasm)
+    .readdirSync(stageLibTarget)
     .values()
     .filter((file) => file.endsWith(".a") || file.endsWith(".o"))
-    .map((file) => path.join(stageLibWasm, file))
+    .map((file) => path.join(stageLibTarget, file))
     .toArray();
 
   if (filesToStrip.length > 0) {
@@ -100,9 +104,9 @@ export function assembleSysroot(config) {
     }
   }
 
-  for (const file of fs.readdirSync(stageLibWasm)) {
-    if (config.libPrunePattern.test(file)) {
-      fs.unlinkSync(path.join(stageLibWasm, file));
+  for (const file of fs.readdirSync(stageLibTarget)) {
+    if (config.libPrunePattern.test(file) || file.endsWith("-wasmexcept.a")) {
+      fs.unlinkSync(path.join(stageLibTarget, file));
     }
   }
 

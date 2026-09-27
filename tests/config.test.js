@@ -117,6 +117,11 @@ test("pruning patterns match expected filenames", () => {
   assert.equal(LIB_PRUNE_PATTERN.test("libal.a"), true);
   assert.equal(LIB_PRUNE_PATTERN.test("libhtml5.a"), true);
   assert.equal(LIB_PRUNE_PATTERN.test("libc-mt.a"), true);
+  assert.equal(LIB_PRUNE_PATTERN.test("libc-wasmexcept.a"), true);
+  assert.equal(LIB_PRUNE_PATTERN.test("libc++-wasmexcept.a"), true);
+  assert.equal(LIB_PRUNE_PATTERN.test("libc++abi-wasmexcept.a"), true);
+  assert.equal(LIB_PRUNE_PATTERN.test("libunwind-wasmexcept.a"), true);
+  assert.equal(LIB_PRUNE_PATTERN.test("libc++abi-debug-mt-wasmexcept.a"), true);
   assert.equal(LIB_PRUNE_PATTERN.test("libc.a"), false);
   assert.equal(LIB_PRUNE_PATTERN.test("libc++.a"), false);
 
