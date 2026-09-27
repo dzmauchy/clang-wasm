@@ -18,8 +18,35 @@ test("getHostArchTag returns valid architecture tag", () => {
   assert.ok(archTag === "ARM64" || archTag === "X64");
 });
 
-test("ensureHostLlvm detects existing populated host LLVM directory", () => {
+test("ensureHostLlvm detects existing populated host LLVM directory and prefers ld.lld", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-exist-"));
+  try {
+    const binDir = path.join(tmpDir, "bin");
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, "clang++"), "#!/bin/sh\nexit 0\n");
+    fs.writeFileSync(path.join(binDir, "clang"), "#!/bin/sh\nexit 0\n");
+    fs.writeFileSync(path.join(binDir, "lld"), "#!/bin/sh\nexit 0\n");
+    fs.writeFileSync(path.join(binDir, "ld.lld"), "#!/bin/sh\nexit 0\n");
+
+    const info = ensureHostLlvm("/tmp", {
+      explicitHostLlvmDir: tmpDir,
+      dryRun: false,
+    });
+
+    assert.equal(info.hostLlvmDir, tmpDir);
+    assert.equal(info.clangXXPath, path.join(binDir, "clang++"));
+    assert.equal(info.clangPath, path.join(binDir, "clang"));
+    assert.equal(info.lldPath, path.join(binDir, "ld.lld"));
+    assert.equal(process.env.CC, path.join(binDir, "clang"));
+    assert.equal(process.env.CXX, path.join(binDir, "clang++"));
+    assert.equal(process.env.LD, path.join(binDir, "ld.lld"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("ensureHostLlvm falls back to lld when ld.lld does not exist", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-exist-lld-only-"));
   try {
     const binDir = path.join(tmpDir, "bin");
     fs.mkdirSync(binDir, { recursive: true });
@@ -32,12 +59,7 @@ test("ensureHostLlvm detects existing populated host LLVM directory", () => {
       dryRun: false,
     });
 
-    assert.equal(info.hostLlvmDir, tmpDir);
-    assert.equal(info.clangXXPath, path.join(binDir, "clang++"));
-    assert.equal(info.clangPath, path.join(binDir, "clang"));
     assert.equal(info.lldPath, path.join(binDir, "lld"));
-    assert.equal(process.env.CC, path.join(binDir, "clang"));
-    assert.equal(process.env.CXX, path.join(binDir, "clang++"));
     assert.equal(process.env.LD, path.join(binDir, "lld"));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

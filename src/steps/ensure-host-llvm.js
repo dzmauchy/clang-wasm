@@ -16,10 +16,13 @@ export function getHostArchTag() {
 export function applyHostLlvmEnvironment(hostLlvmDir, dryRun) {
   const binDir = path.join(hostLlvmDir, "bin");
   const libDir = path.join(hostLlvmDir, "lib");
+  const lldPath = path.join(binDir, "lld");
+  const ldLldPath = path.join(binDir, "ld.lld");
+  const effectiveLld = fs.existsSync(ldLldPath) ? ldLldPath : lldPath;
 
   process.env.CC = path.join(binDir, "clang");
   process.env.CXX = path.join(binDir, "clang++");
-  process.env.LD = path.join(binDir, "lld");
+  process.env.LD = effectiveLld;
 
   if (dryRun) {
     return;
@@ -63,7 +66,8 @@ export function ensureHostLlvm(rootDir, options = {}) {
   const ldLldPath = path.join(binDir, "ld.lld");
   const llvmStripPath = path.join(binDir, "llvm-strip");
 
-  const effectiveLldPath = fs.existsSync(lldPath) ? lldPath : ldLldPath;
+  // Prefer ld.lld over generic lld driver on Unix platforms
+  const effectiveLldPath = fs.existsSync(ldLldPath) ? ldLldPath : lldPath;
 
   const isPopulated =
     fs.existsSync(clangXXPath) &&
@@ -84,7 +88,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
     };
   }
 
-  const archiveName = `LLVM-${version}-Linux-${archTag}.tar.xz`;
+  const archiveName = `LLVM-${version}-Linux-${archTag}.tar.zst`;
   const url = `https://github.com/llvm/llvm-project/releases/download/llvmorg-${version}/${archiveName}`;
 
   console.log(
@@ -98,18 +102,21 @@ export function ensureHostLlvm(rootDir, options = {}) {
     fs.writeFileSync(clangPath, "#!/bin/sh\nexit 0\n");
     fs.writeFileSync(clangXXPath, "#!/bin/sh\nexit 0\n");
     fs.writeFileSync(lldPath, "#!/bin/sh\nexit 0\n");
+    fs.writeFileSync(ldLldPath, "#!/bin/sh\nexit 0\n");
     fs.writeFileSync(llvmStripPath, "#!/bin/sh\nexit 0\n");
     fs.chmodSync(clangPath, 0o755);
     fs.chmodSync(clangXXPath, 0o755);
     fs.chmodSync(lldPath, 0o755);
+    fs.chmodSync(ldLldPath, 0o755);
     fs.chmodSync(llvmStripPath, 0o755);
     applyHostLlvmEnvironment(targetDir, true);
     ensureLibicu(targetDir, { dryRun: true });
+    const dryRunLldPath = fs.existsSync(ldLldPath) ? ldLldPath : lldPath;
     return {
       hostLlvmDir: targetDir,
       clangPath,
       clangXXPath,
-      lldPath,
+      lldPath: dryRunLldPath,
       llvmStripPath,
     };
   }
@@ -117,7 +124,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
   fs.mkdirSync(targetDir, { recursive: true });
 
   run(
-    `curl -fL "${url}" | tar -xJf - --strip-components=1 -C "${targetDir}"`,
+    `curl -fL "${url}" | tar -I 'zstd --long=30' -xf - --strip-components=1 -C "${targetDir}"`,
     rootDir,
     {},
     false
@@ -126,7 +133,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
   applyHostLlvmEnvironment(targetDir, false);
   ensureLibicu(targetDir, { dryRun: false });
 
-  const finalLldPath = fs.existsSync(lldPath) ? lldPath : ldLldPath;
+  const finalLldPath = fs.existsSync(ldLldPath) ? ldLldPath : lldPath;
   console.log(`Successfully installed host LLVM ${version} to: ${targetDir}`);
 
   return {

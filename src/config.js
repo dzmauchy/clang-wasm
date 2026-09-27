@@ -179,9 +179,9 @@ export function resolveBuildConfig(options = {}) {
   const hostClangXXPath = options.hostClangXXPath || path.join(hostBinDir, "clang++");
   const hostLldPath =
     options.hostLldPath ||
-    (fs.existsSync(path.join(hostBinDir, "lld"))
-      ? path.join(hostBinDir, "lld")
-      : path.join(hostBinDir, "ld.lld"));
+    (fs.existsSync(path.join(hostBinDir, "ld.lld"))
+      ? path.join(hostBinDir, "ld.lld")
+      : path.join(hostBinDir, "lld"));
 
   const wasmOptCandidates = [
     path.join(emsdkDir, "upstream/bin/wasm-opt"),
