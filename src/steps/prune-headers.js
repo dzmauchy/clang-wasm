@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { BuildConfig } from "../types.ts";
 
-export function pruneEmscriptenHeaders(config: BuildConfig): void {
+export function pruneEmscriptenHeaders(config) {
   console.log("\n--- [1/5] Pruning Emscripten Headers ---");
 
   const sysInc = path.join(

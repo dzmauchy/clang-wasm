@@ -1,14 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { BuildConfig } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 
-export function optimizeWasmBinaries(config: BuildConfig): void {
+const TOOLS = Object.freeze(["clang", "lld"]);
+
+export function optimizeWasmBinaries(config) {
   console.log("\n--- [5/5] Optimizing Wasm Binaries & Copying JavaScript Wrappers ---");
 
   fs.mkdirSync(config.distDir, { recursive: true });
 
-  for (const tool of ["clang", "lld"] as const) {
+  for (const tool of TOOLS) {
     const srcWasm = path.join(config.wasmBinDir, `${tool}.wasm`);
     const srcJs = path.join(config.wasmBinDir, `${tool}.js`);
     const outWasm = path.join(config.distDir, `${tool}.wasm`);

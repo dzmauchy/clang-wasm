@@ -3,7 +3,7 @@ import path from "node:path";
 
 export const DEFAULT_SHARED_DIR = "/opt/shared";
 
-export function isDirectoryWritable(dirPath: string): boolean {
+export function isDirectoryWritable(dirPath) {
   try {
     if (!fs.existsSync(dirPath)) {
       return false;
@@ -20,9 +20,9 @@ export function isDirectoryWritable(dirPath: string): boolean {
 }
 
 export function resolvePreferredLlvmDir(
-  rootDir: string,
-  sharedDir: string = DEFAULT_SHARED_DIR
-): string {
+  rootDir,
+  sharedDir = DEFAULT_SHARED_DIR
+) {
   if (isDirectoryWritable(sharedDir)) {
     return path.join(sharedDir, "llvm-project");
   }
@@ -30,9 +30,9 @@ export function resolvePreferredLlvmDir(
 }
 
 export function resolvePreferredEmsdkDir(
-  rootDir: string,
-  sharedDir: string = DEFAULT_SHARED_DIR
-): string {
+  rootDir,
+  sharedDir = DEFAULT_SHARED_DIR
+) {
   if (isDirectoryWritable(sharedDir)) {
     return path.join(sharedDir, "emsdk");
   }
@@ -40,9 +40,9 @@ export function resolvePreferredEmsdkDir(
 }
 
 export function resolvePreferredHostLlvmDir(
-  rootDir: string,
-  sharedDir: string = DEFAULT_SHARED_DIR
-): string {
+  rootDir,
+  sharedDir = DEFAULT_SHARED_DIR
+) {
   if (isDirectoryWritable(sharedDir)) {
     return path.join(sharedDir, "llvm");
   }

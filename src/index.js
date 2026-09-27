@@ -1,18 +1,18 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { resolveBuildConfig } from "./config.ts";
-import { ensureEmsdk } from "./steps/ensure-emsdk.ts";
-import { ensureLlvmProject } from "./steps/ensure-llvm.ts";
-import { ensureHostLlvm } from "./steps/ensure-host-llvm.ts";
-import { pruneEmscriptenHeaders } from "./steps/prune-headers.ts";
-import { buildEmscriptenSysroot } from "./steps/build-sysroot-libs.ts";
-import { buildNativeTableGen } from "./steps/build-native-tools.ts";
-import { buildWasmBinaries } from "./steps/build-wasm-tools.ts";
-import { optimizeWasmBinaries } from "./steps/optimize-binaries.ts";
-import { assembleSysroot } from "./steps/assemble-sysroot.ts";
-import { verifyArtifacts } from "./steps/verify-artifacts.ts";
+import { resolveBuildConfig } from "./config.js";
+import { ensureEmsdk } from "./steps/ensure-emsdk.js";
+import { ensureLlvmProject } from "./steps/ensure-llvm.js";
+import { ensureHostLlvm } from "./steps/ensure-host-llvm.js";
+import { pruneEmscriptenHeaders } from "./steps/prune-headers.js";
+import { buildEmscriptenSysroot } from "./steps/build-sysroot-libs.js";
+import { buildNativeTableGen } from "./steps/build-native-tools.js";
+import { buildWasmBinaries } from "./steps/build-wasm-tools.js";
+import { optimizeWasmBinaries } from "./steps/optimize-binaries.js";
+import { assembleSysroot } from "./steps/assemble-sysroot.js";
+import { verifyArtifacts } from "./steps/verify-artifacts.js";
 
-export async function main(args: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(args = process.argv.slice(2)) {
   const { values } = parseArgs({
     args,
     options: {
@@ -37,7 +37,7 @@ Clang & LLD WebAssembly Build Toolchain
 
 Usage:
   npm run build [-- [options]]
-  node src/index.ts [options]
+  node src/index.js [options]
 
 Options:
   --llvm-dir <path>         Path to the LLVM repository root (defaults to /opt/shared/llvm-project or ./llvm-project)
@@ -136,7 +136,7 @@ const isDirectExecution = Boolean(
 );
 
 if (isDirectExecution) {
-  main().catch((err: unknown) => {
+  Promise.try(main).catch((err) => {
     console.error(
       `\n\x1b[31m[ERROR] Toolchain build failed:\x1b[0m`,
       err instanceof Error ? err.message : err

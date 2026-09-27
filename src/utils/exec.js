@@ -1,24 +1,26 @@
 import { execSync } from "node:child_process";
 
-export function cleanFlags(str: string): string {
-  return str.trim().split(/\s+/).join(" ");
+export function cleanFlags(str) {
+  return str.trim().split(/\s+/v).join(" ");
 }
 
-export function formatBytes(bytes: number): string {
+export function formatBytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 export function run(
-  command: string,
-  cwd: string = process.cwd(),
-  extraEnv: Record<string, string | undefined> = {},
-  dryRun: boolean = false
-): void {
+  command,
+  cwd = process.cwd(),
+  extraEnv = {},
+  dryRun = false
+) {
   const normalized = command
     .trim()
     .split("\n")
+    .values()
     .map((line) => line.trim().replace(/\\$/, ""))
     .filter(Boolean)
+    .toArray()
     .join(" ");
 
   console.log(`\n\x1b[36m>>> Running:\x1b[0m ${normalized} (in ${cwd})`);

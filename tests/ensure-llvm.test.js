@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ensureLlvmProject, DEFAULT_LLVM_TAG } from "../src/steps/ensure-llvm.ts";
+import { ensureLlvmProject, DEFAULT_LLVM_TAG } from "../src/steps/ensure-llvm.js";
 
 test("ensureLlvmProject detects existing populated llvm directory", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-exist-"));

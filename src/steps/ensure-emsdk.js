@@ -1,14 +1,13 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { EnsureEmsdkOptions } from "../types.ts";
-import { run } from "../utils/exec.ts";
-import { isDirectoryWritable, DEFAULT_SHARED_DIR } from "../utils/fs.ts";
+import { run } from "../utils/exec.js";
+import { isDirectoryWritable, DEFAULT_SHARED_DIR } from "../utils/fs.js";
 
 export const DEFAULT_EMSDK_VERSION = "6.0.9";
 export const DEFAULT_EMSDK_REPO = "https://github.com/emscripten-core/emsdk.git";
 
-export function applyEmsdkEnvironment(emsdkDir: string, dryRun: boolean): void {
+export function applyEmsdkEnvironment(emsdkDir, dryRun) {
   process.env.EMSDK = emsdkDir;
 
   if (dryRun) {
@@ -25,10 +24,10 @@ export function applyEmsdkEnvironment(emsdkDir: string, dryRun: boolean): void {
       });
 
       const exportRegex =
-        /export\s+([A-Za-z_][A-Za-z0-9_]*)=["']?(.*?)["']?;?$/gm;
-      let match: RegExpExecArray | null;
+        /export\s+(?<key>[A-Za-z_][A-Za-z0-9_]*)=["']?(?<val>.*?)["']?;?$/gmv;
+      let match;
       while ((match = exportRegex.exec(output)) !== null) {
-        const [, key, val] = match;
+        const { key, val } = match.groups ?? {};
         if (key && val !== undefined) {
           process.env[key] = val;
         }
@@ -42,9 +41,9 @@ export function applyEmsdkEnvironment(emsdkDir: string, dryRun: boolean): void {
   const upstreamBin = path.join(emsdkDir, "upstream/bin");
 
   const currentPath = process.env.PATH || "";
-  const existingParts = currentPath.split(path.delimiter);
+  const existingParts = new Set(currentPath.split(path.delimiter));
   const pathsToAdd = [emscriptenBin, upstreamBin, emsdkDir].filter(
-    (p) => fs.existsSync(p) && !existingParts.includes(p)
+    (p) => fs.existsSync(p) && !existingParts.has(p)
   );
 
   if (pathsToAdd.length > 0) {
@@ -52,10 +51,7 @@ export function applyEmsdkEnvironment(emsdkDir: string, dryRun: boolean): void {
   }
 }
 
-export function ensureEmsdk(
-  rootDir: string,
-  options: EnsureEmsdkOptions = {}
-): string {
+export function ensureEmsdk(rootDir, options = {}) {
   const version = options.version || process.env.EMSDK_VERSION || DEFAULT_EMSDK_VERSION;
   const repoUrl = options.repoUrl || DEFAULT_EMSDK_REPO;
   const dryRun = options.dryRun ?? false;
@@ -73,7 +69,7 @@ export function ensureEmsdk(
 
   // 2. Determine target directory: prefer /opt/shared/emsdk if /opt/shared exists and is writable
   const sharedWritable = isDirectoryWritable(sharedDir);
-  let targetDir: string;
+  let targetDir;
 
   if (sharedWritable) {
     targetDir = path.join(sharedDir, "emsdk");

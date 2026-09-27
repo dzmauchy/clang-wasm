@@ -5,7 +5,7 @@ import {
   CLANG_HEADER_PRUNE_PATTERN,
   LIB_PRUNE_PATTERN,
   EMSCRIPTEN_PRUNE_DIRS,
-} from "../src/config.ts";
+} from "../src/config.js";
 
 test("resolveBuildConfig resolves emsdkDir to fallback when EMSDK is missing and sharedDir is not writable", () => {
   const origEmsdk = process.env.EMSDK;

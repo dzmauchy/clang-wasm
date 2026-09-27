@@ -1,22 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { EnsureHostLlvmOptions, HostLlvmInfo } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 import {
   DEFAULT_SHARED_DIR,
   resolvePreferredHostLlvmDir,
-} from "../utils/fs.ts";
+} from "../utils/fs.js";
 
 export const DEFAULT_HOST_LLVM_VERSION = "23.1.2";
 
-export function getHostArchTag(): "ARM64" | "X64" {
+export function getHostArchTag() {
   return process.arch === "arm64" ? "ARM64" : "X64";
 }
 
-export function applyHostLlvmEnvironment(
-  hostLlvmDir: string,
-  dryRun: boolean
-): void {
+export function applyHostLlvmEnvironment(hostLlvmDir, dryRun) {
   const binDir = path.join(hostLlvmDir, "bin");
   process.env.CC = path.join(binDir, "clang");
   process.env.CXX = path.join(binDir, "clang++");
@@ -27,16 +23,13 @@ export function applyHostLlvmEnvironment(
   }
 
   const currentPath = process.env.PATH || "";
-  const existingParts = currentPath.split(path.delimiter);
-  if (!existingParts.includes(binDir)) {
+  const existingParts = new Set(currentPath.split(path.delimiter));
+  if (!existingParts.has(binDir)) {
     process.env.PATH = `${binDir}${path.delimiter}${currentPath}`;
   }
 }
 
-export function ensureHostLlvm(
-  rootDir: string,
-  options: EnsureHostLlvmOptions = {}
-): HostLlvmInfo {
+export function ensureHostLlvm(rootDir, options = {}) {
   const version =
     options.version || process.env.LLVM_VERSION || DEFAULT_HOST_LLVM_VERSION;
   const archTag = getHostArchTag();

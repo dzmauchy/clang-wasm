@@ -7,7 +7,7 @@ import {
   ensureHostLlvm,
   getHostArchTag,
   DEFAULT_HOST_LLVM_VERSION,
-} from "../src/steps/ensure-host-llvm.ts";
+} from "../src/steps/ensure-host-llvm.js";
 
 test("DEFAULT_HOST_LLVM_VERSION is 23.1.2", () => {
   assert.equal(DEFAULT_HOST_LLVM_VERSION, "23.1.2");

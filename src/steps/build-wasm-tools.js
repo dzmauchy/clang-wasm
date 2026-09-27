@@ -1,7 +1,6 @@
-import type { BuildConfig } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 
-export function buildWasmBinaries(config: BuildConfig): void {
+export function buildWasmBinaries(config) {
   console.log("\n--- [4/5] Cross-Compiling Clang & LLD to Wasm ---");
 
   run(

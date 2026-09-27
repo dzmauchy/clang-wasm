@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { BuildConfig } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 
-function findResourceDir(basePaths: string[]): string | null {
+function findResourceDir(basePaths) {
   for (const base of basePaths) {
     if (fs.existsSync(base)) {
       const items = fs.readdirSync(base, { withFileTypes: true });
@@ -14,7 +13,7 @@ function findResourceDir(basePaths: string[]): string | null {
   return null;
 }
 
-export function assembleSysroot(config: BuildConfig): void {
+export function assembleSysroot(config) {
   console.log("\n--- Assembling and Archiving Sysroot ---");
 
   const sysrootArchive = path.join(config.distDir, "sysroot.tgz");
@@ -69,8 +68,11 @@ export function assembleSysroot(config: BuildConfig): void {
 
   const filesToStrip = fs
     .readdirSync(stageLibWasm)
+    .values()
     .filter((file) => file.endsWith(".a") || file.endsWith(".o"))
-    .map((file) => path.join(stageLibWasm, file));
+    .map((file) => path.join(stageLibWasm, file))
+    .toArray();
+
   if (filesToStrip.length > 0) {
     const fileArgs = filesToStrip.map((file) => `"${file}"`).join(" ");
     run(

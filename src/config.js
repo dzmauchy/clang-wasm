@@ -1,16 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { BuildConfig, ConfigOptions } from "./types.ts";
-import { cleanFlags } from "./utils/exec.ts";
+import { cleanFlags } from "./utils/exec.js";
 import {
   DEFAULT_SHARED_DIR,
   isDirectoryWritable,
   resolvePreferredLlvmDir,
   resolvePreferredEmsdkDir,
   resolvePreferredHostLlvmDir,
-} from "./utils/fs.ts";
+} from "./utils/fs.js";
 
-export const EMSCRIPTEN_PRUNE_DIRS: readonly string[] = [
+export const EMSCRIPTEN_PRUNE_DIRS = Object.freeze([
   "AL",
   "EGL",
   "GL",
@@ -25,17 +24,18 @@ export const EMSCRIPTEN_PRUNE_DIRS: readonly string[] = [
   "sanitizer",
   "scsi",
   "webgl",
-] as const;
+]);
 
 export const CLANG_HEADER_PRUNE_PATTERN =
-  /(intrin|arm|riscv|altivec|cpuid|cuda|hip|spirv|hexagon|opencl)/i;
+  /(intrin|arm|riscv|altivec|cpuid|cuda|hip|spirv|hexagon|opencl)/iv;
 
 export const LIB_PRUNE_PATTERN = new RegExp(
   `^(${[
     "lib(GL.*|al|html5|fetch.*|stb_image|sockets.*|jsmath|openmp|wasm_workers.*|embind.*|emmalloc.*|mimalloc.*|llvmlibc.*|wasmfs.*|standalonewasm-.*)\\.a",
     ".*-(mt|ww|debug|tracing|asan|ubsan.*|lsan.*|legacyexcept|legacysjlj|wasmsjlj).*\\.a",
     "libclang_rt\\.(asan.*|ubsan.*|lsan.*|sanitizer_common.*)\\.a",
-  ].join("|")})$`
+  ].join("|")})$`,
+  "v"
 );
 
 export const CXX_FLAGS = cleanFlags(`
@@ -101,7 +101,7 @@ export const EXE_LINKER_FLAGS = cleanFlags(`
   -sMALLOC=dlmalloc
 `);
 
-export const WASM_OPT_FLAGS: readonly string[] = [
+export const WASM_OPT_FLAGS = Object.freeze([
   "-Oz",
   "--converge",
   "--duplicate-function-elimination",
@@ -130,15 +130,15 @@ export const WASM_OPT_FLAGS: readonly string[] = [
   "--merge-similar-functions",
   "--merge-locals",
   "--gufa-optimizing",
-] as const;
+]);
 
-export function resolveBuildConfig(options: ConfigOptions = {}): BuildConfig {
+export function resolveBuildConfig(options = {}) {
   const rootDir = path.resolve(options.rootDir || process.cwd());
   const dryRun = options.dryRun ?? (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true");
 
   const sharedDir = options.sharedDir || DEFAULT_SHARED_DIR;
 
-  let emsdkDir: string;
+  let emsdkDir;
   if (options.emsdkDir) {
     emsdkDir = path.resolve(options.emsdkDir);
   } else if (isDirectoryWritable(sharedDir)) {
@@ -150,7 +150,7 @@ export function resolveBuildConfig(options: ConfigOptions = {}): BuildConfig {
   }
 
   // Resolve LLVM source root
-  let llvmDir: string;
+  let llvmDir;
   if (options.llvmDir) {
     llvmDir = path.resolve(options.llvmDir);
   } else if (process.env.LLVM_DIR) {

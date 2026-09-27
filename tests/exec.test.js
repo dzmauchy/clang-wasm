@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanFlags, formatBytes, run } from "../src/utils/exec.ts";
+import { cleanFlags, formatBytes, run } from "../src/utils/exec.js";
 
 test("cleanFlags collapses multiple whitespaces and newlines", () => {
   const input = `

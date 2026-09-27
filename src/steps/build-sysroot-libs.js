@@ -1,7 +1,6 @@
-import type { BuildConfig } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 
-export function buildEmscriptenSysroot(config: BuildConfig): void {
+export function buildEmscriptenSysroot(config) {
   console.log("\n--- [2/5] Building Emscripten System Libraries ---");
 
   run(

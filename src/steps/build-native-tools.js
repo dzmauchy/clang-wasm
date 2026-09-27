@@ -1,7 +1,6 @@
-import type { BuildConfig } from "../types.ts";
-import { run } from "../utils/exec.ts";
+import { run } from "../utils/exec.js";
 
-export function buildNativeTableGen(config: BuildConfig): void {
+export function buildNativeTableGen(config) {
   console.log("\n--- [3/5] Building Native TableGen Tools ---");
 
   run(

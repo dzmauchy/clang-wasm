@@ -9,11 +9,11 @@ import {
   resolvePreferredEmsdkDir,
   resolvePreferredHostLlvmDir,
   DEFAULT_SHARED_DIR,
-} from "../src/utils/fs.ts";
-import { ensureLlvmProject } from "../src/steps/ensure-llvm.ts";
-import { ensureEmsdk } from "../src/steps/ensure-emsdk.ts";
-import { ensureHostLlvm } from "../src/steps/ensure-host-llvm.ts";
-import { resolveBuildConfig } from "../src/config.ts";
+} from "../src/utils/fs.js";
+import { ensureLlvmProject } from "../src/steps/ensure-llvm.js";
+import { ensureEmsdk } from "../src/steps/ensure-emsdk.js";
+import { ensureHostLlvm } from "../src/steps/ensure-host-llvm.js";
+import { resolveBuildConfig } from "../src/config.js";
 
 test("isDirectoryWritable accurately detects directory existence and writability", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "shared-test-writable-"));

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { main } from "../src/index.ts";
-import { verifyArtifacts, REQUIRED_ARTIFACTS } from "../src/steps/verify-artifacts.ts";
-import { resolveBuildConfig } from "../src/config.ts";
+import { main } from "../src/index.js";
+import { verifyArtifacts, REQUIRED_ARTIFACTS } from "../src/steps/verify-artifacts.js";
+import { resolveBuildConfig } from "../src/config.js";
 
 test("verifyArtifacts detects missing artifacts", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clang-wasm-test-"));

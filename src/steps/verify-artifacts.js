@@ -1,21 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ArtifactInfo, BuildConfig } from "../types.ts";
-import { formatBytes } from "../utils/exec.ts";
+import { formatBytes } from "../utils/exec.js";
 
-export const REQUIRED_ARTIFACTS = [
+export const REQUIRED_ARTIFACTS = Object.freeze([
   "clang.wasm",
   "clang.js",
   "lld.wasm",
   "lld.js",
   "sysroot.tgz",
-] as const;
+]);
 
-export function verifyArtifacts(config: BuildConfig): ArtifactInfo[] {
+export function verifyArtifacts(config) {
   console.log("\n\x1b[32mBuild finished successfully. Artifacts ready in dist/:\x1b[0m");
 
-  const missing: string[] = [];
-  const artifacts: ArtifactInfo[] = [];
+  const missing = [];
+  const artifacts = [];
 
   for (const artifact of REQUIRED_ARTIFACTS) {
     const filePath = path.join(config.distDir, artifact);
@@ -25,7 +24,7 @@ export function verifyArtifacts(config: BuildConfig): ArtifactInfo[] {
     }
 
     const stat = fs.statSync(filePath);
-    const info: ArtifactInfo = {
+    const info = {
       name: artifact,
       path: filePath,
       sizeBytes: stat.size,
