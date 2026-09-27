@@ -38,3 +38,13 @@ export function resolvePreferredEmsdkDir(
   }
   return path.join(rootDir, "emsdk");
 }
+
+export function resolvePreferredHostLlvmDir(
+  rootDir: string,
+  sharedDir: string = DEFAULT_SHARED_DIR
+): string {
+  if (isDirectoryWritable(sharedDir)) {
+    return path.join(sharedDir, "llvm");
+  }
+  return path.join(rootDir, "llvm");
+}

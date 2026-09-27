@@ -7,6 +7,7 @@ import {
   isDirectoryWritable,
   resolvePreferredLlvmDir,
   resolvePreferredEmsdkDir,
+  resolvePreferredHostLlvmDir,
 } from "./utils/fs.ts";
 
 export const EMSCRIPTEN_PRUNE_DIRS: readonly string[] = [
@@ -179,6 +180,20 @@ export function resolveBuildConfig(options: ConfigOptions = {}): BuildConfig {
     "upstream/emscripten/cache/sysroot"
   );
 
+  const hostLlvmDir = path.resolve(
+    options.hostLlvmDir ||
+      process.env.HOST_LLVM_DIR ||
+      resolvePreferredHostLlvmDir(rootDir, sharedDir)
+  );
+  const hostBinDir = path.join(hostLlvmDir, "bin");
+  const hostClangPath = options.hostClangPath || path.join(hostBinDir, "clang");
+  const hostClangXXPath = options.hostClangXXPath || path.join(hostBinDir, "clang++");
+  const hostLldPath =
+    options.hostLldPath ||
+    (fs.existsSync(path.join(hostBinDir, "lld"))
+      ? path.join(hostBinDir, "lld")
+      : path.join(hostBinDir, "ld.lld"));
+
   const wasmOptCandidates = [
     path.join(emsdkDir, "upstream/bin/wasm-opt"),
     path.join(emsdkDir, "upstream/emscripten/bin/wasm-opt"),
@@ -187,6 +202,7 @@ export function resolveBuildConfig(options: ConfigOptions = {}): BuildConfig {
     wasmOptCandidates.find((candidate) => fs.existsSync(candidate)) || "wasm-opt";
 
   const llvmStripCandidates = [
+    path.join(hostBinDir, "llvm-strip"),
     path.join(emsdkDir, "upstream/bin/llvm-strip"),
   ];
   const llvmStripPath =
@@ -214,6 +230,10 @@ export function resolveBuildConfig(options: ConfigOptions = {}): BuildConfig {
     dryRun,
     llvmTag: options.llvmTag || process.env.LLVM_TAG || "llvmorg-23.1.2",
     emsdkVersion: options.emsdkVersion || process.env.EMSDK_VERSION || "6.0.9",
+    hostLlvmDir,
+    hostClangPath,
+    hostClangXXPath,
+    hostLldPath,
     cFlags: C_FLAGS,
     cxxFlags: CXX_FLAGS,
     exeLinkerFlags: EXE_LINKER_FLAGS,

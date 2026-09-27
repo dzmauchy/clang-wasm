@@ -24,30 +24,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Enable Clang 22 as default
-        run: |
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-22 100
-          sudo update-alternatives --set clang /usr/bin/clang-22
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-22 100
-          sudo update-alternatives --set clang++ /usr/bin/clang++-22
-          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-22 100
-          sudo update-alternatives --set clang-format /usr/bin/clang-format-22
-          
-          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-22 100
-          sudo update-alternatives --set ld.lld /usr/bin/ld.lld-22
-          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-22 100
-          sudo update-alternatives --set lld /usr/bin/lld-22
-          
-          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-22 100
-          sudo update-alternatives --set cc /usr/bin/clang-22
-          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-22 100
-          sudo update-alternatives --set c++ /usr/bin/clang++-22
-          sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.lld-22 100
-          sudo update-alternatives --set ld /usr/bin/ld.lld-22
-          
-          echo "CC=clang-22" >> "$GITHUB_ENV"
-          echo "CXX=clang++-22" >> "$GITHUB_ENV"
-          echo "LD=ld.lld-22" >> "$GITHUB_ENV"
       - name: Check out LLVM ${{ inputs.llvm_version }}
         uses: actions/checkout@v7
         with:

@@ -10,9 +10,9 @@ export function buildNativeTableGen(config: BuildConfig): void {
       -DCMAKE_BUILD_TYPE=Release
       -DLLVM_ENABLE_PROJECTS="clang"
       -DLLVM_TARGETS_TO_BUILD="WebAssembly"
-      -DCMAKE_C_COMPILER=clang
-      -DCMAKE_CXX_COMPILER=clang++
-      -DLLVM_USE_LINKER=lld
+      -DCMAKE_C_COMPILER="${config.hostClangPath}"
+      -DCMAKE_CXX_COMPILER="${config.hostClangXXPath}"
+      -DLLVM_USE_LINKER="${config.hostLldPath}"
       -DLLVM_ENABLE_LIBXML2=OFF
       -DLLVM_ENABLE_ZLIB=OFF
       -DLLVM_ENABLE_ZSTD=OFF
@@ -27,7 +27,11 @@ export function buildNativeTableGen(config: BuildConfig): void {
       -DLLVM_BUILD_UTILS=OFF
     `,
     config.llvmDir,
-    {},
+    {
+      CC: config.hostClangPath,
+      CXX: config.hostClangXXPath,
+      LD: config.hostLldPath,
+    },
     config.dryRun
   );
 
@@ -39,7 +43,11 @@ export function buildNativeTableGen(config: BuildConfig): void {
       llvm-min-tblgen
     `,
     config.llvmDir,
-    {},
+    {
+      CC: config.hostClangPath,
+      CXX: config.hostClangXXPath,
+      LD: config.hostLldPath,
+    },
     config.dryRun
   );
 }

@@ -15,6 +15,10 @@ export interface BuildConfig {
   dryRun: boolean;
   llvmTag: string;
   emsdkVersion: string;
+  hostLlvmDir: string;
+  hostClangPath: string;
+  hostClangXXPath: string;
+  hostLldPath: string;
   cFlags: string;
   cxxFlags: string;
   exeLinkerFlags: string;
@@ -34,6 +38,10 @@ export interface ConfigOptions {
   llvmTag?: string;
   emsdkVersion?: string;
   sharedDir?: string;
+  hostLlvmDir?: string;
+  hostClangPath?: string;
+  hostClangXXPath?: string;
+  hostLldPath?: string;
 }
 
 export interface EnsureLlvmOptions {
@@ -50,6 +58,21 @@ export interface EnsureEmsdkOptions {
   repoUrl?: string;
   sharedDir?: string;
   dryRun?: boolean;
+}
+
+export interface EnsureHostLlvmOptions {
+  explicitHostLlvmDir?: string;
+  version?: string;
+  sharedDir?: string;
+  dryRun?: boolean;
+}
+
+export interface HostLlvmInfo {
+  hostLlvmDir: string;
+  clangPath: string;
+  clangXXPath: string;
+  lldPath: string;
+  llvmStripPath: string;
 }
 
 export interface ArtifactInfo {

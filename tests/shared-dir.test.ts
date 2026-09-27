@@ -7,10 +7,12 @@ import {
   isDirectoryWritable,
   resolvePreferredLlvmDir,
   resolvePreferredEmsdkDir,
+  resolvePreferredHostLlvmDir,
   DEFAULT_SHARED_DIR,
 } from "../src/utils/fs.ts";
 import { ensureLlvmProject } from "../src/steps/ensure-llvm.ts";
 import { ensureEmsdk } from "../src/steps/ensure-emsdk.ts";
+import { ensureHostLlvm } from "../src/steps/ensure-host-llvm.ts";
 import { resolveBuildConfig } from "../src/config.ts";
 
 test("isDirectoryWritable accurately detects directory existence and writability", () => {
@@ -34,9 +36,11 @@ test("prefers /opt/shared paths when shared directory exists and is writable", (
   try {
     const llvmDir = resolvePreferredLlvmDir(tmpRoot, tmpShared);
     const emsdkDir = resolvePreferredEmsdkDir(tmpRoot, tmpShared);
+    const hostLlvmDir = resolvePreferredHostLlvmDir(tmpRoot, tmpShared);
 
     assert.equal(llvmDir, path.join(tmpShared, "llvm-project"));
     assert.equal(emsdkDir, path.join(tmpShared, "emsdk"));
+    assert.equal(hostLlvmDir, path.join(tmpShared, "llvm"));
 
     const ensuredLlvm = ensureLlvmProject(tmpRoot, {
       sharedDir: tmpShared,
@@ -50,6 +54,12 @@ test("prefers /opt/shared paths when shared directory exists and is writable", (
     });
     assert.equal(ensuredEmsdk, path.join(tmpShared, "emsdk"));
 
+    const ensuredHostLlvm = ensureHostLlvm(tmpRoot, {
+      sharedDir: tmpShared,
+      dryRun: true,
+    });
+    assert.equal(ensuredHostLlvm.hostLlvmDir, path.join(tmpShared, "llvm"));
+
     const config = resolveBuildConfig({
       rootDir: tmpRoot,
       sharedDir: tmpShared,
@@ -57,6 +67,7 @@ test("prefers /opt/shared paths when shared directory exists and is writable", (
     });
     assert.equal(config.llvmDir, path.join(tmpShared, "llvm-project"));
     assert.equal(config.emsdkDir, path.join(tmpShared, "emsdk"));
+    assert.equal(config.hostLlvmDir, path.join(tmpShared, "llvm"));
   } finally {
     fs.rmSync(tmpShared, { recursive: true, force: true });
     fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -72,9 +83,11 @@ test("falls back to current/root directories when shared directory does not exis
   try {
     const llvmDir = resolvePreferredLlvmDir(tmpRoot, nonExistentShared);
     const emsdkDir = resolvePreferredEmsdkDir(tmpRoot, nonExistentShared);
+    const hostLlvmDir = resolvePreferredHostLlvmDir(tmpRoot, nonExistentShared);
 
     assert.equal(llvmDir, path.join(tmpRoot, "llvm-project"));
     assert.equal(emsdkDir, path.join(tmpRoot, "emsdk"));
+    assert.equal(hostLlvmDir, path.join(tmpRoot, "llvm"));
 
     const ensuredLlvm = ensureLlvmProject(tmpRoot, {
       sharedDir: nonExistentShared,
@@ -88,6 +101,12 @@ test("falls back to current/root directories when shared directory does not exis
     });
     assert.equal(ensuredEmsdk, path.join(tmpRoot, "emsdk"));
 
+    const ensuredHostLlvm = ensureHostLlvm(tmpRoot, {
+      sharedDir: nonExistentShared,
+      dryRun: true,
+    });
+    assert.equal(ensuredHostLlvm.hostLlvmDir, path.join(tmpRoot, "llvm"));
+
     const config = resolveBuildConfig({
       rootDir: tmpRoot,
       sharedDir: nonExistentShared,
@@ -95,6 +114,7 @@ test("falls back to current/root directories when shared directory does not exis
     });
     assert.equal(config.llvmDir, path.join(tmpRoot, "llvm-project"));
     assert.equal(config.emsdkDir, path.join(tmpRoot, "emsdk"));
+    assert.equal(config.hostLlvmDir, path.join(tmpRoot, "llvm"));
   } finally {
     if (origEmsdk !== undefined) {
       process.env.EMSDK = origEmsdk;
