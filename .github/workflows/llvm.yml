@@ -29,21 +29,9 @@ jobs:
         with:
           node-version: latest
 
-      - name: Check out LLVM ${{ inputs.llvm_version }}
-        uses: actions/checkout@v7
-        with:
-          repository: llvm/llvm-project
-          ref: llvmorg-${{ inputs.llvm_version }}
-          fetch-depth: 1
-          path: out/llvm-project
-
-      - name: Setup emsdk
-        uses: emscripten-core/setup-emsdk@v16
-        with:
-          version: 6.0.9
-          actions-cache-folder: 'emsdk-cache'
-
       - name: Build Clang, LLD and sysroot
+        env:
+          LLVM_VERSION: ${{ inputs.llvm_version }}
         run: npm run build
 
       - name: Publish GitHub Release
