@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ensureLlvmProject, DEFAULT_LLVM_TAG } from "../src/steps/ensure-llvm.js";
+import { ensureLlvmProject } from "../src/steps/ensure-llvm.js";
 
 test("ensureLlvmProject detects existing populated llvm directory", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-exist-"));
@@ -14,6 +14,7 @@ test("ensureLlvmProject detects existing populated llvm directory", () => {
 
     const result = ensureLlvmProject(tmpDir, {
       explicitLlvmDir: llvmFolder,
+      tag: "test-tag",
       dryRun: false,
     });
 
@@ -30,7 +31,7 @@ test("ensureLlvmProject creates mock directory in dry-run mode if missing", () =
 
     const result = ensureLlvmProject(tmpDir, {
       explicitLlvmDir: targetFolder,
-      tag: "llvmorg-23.1.2",
+      tag: "test-tag",
       dryRun: true,
     });
 
@@ -45,6 +46,7 @@ test("ensureLlvmProject defaults to out/llvm-project and ensures out directory",
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-default-"));
   try {
     const result = ensureLlvmProject(tmpDir, {
+      tag: "test-tag",
       dryRun: true,
     });
 
@@ -55,6 +57,51 @@ test("ensureLlvmProject defaults to out/llvm-project and ensures out directory",
   }
 });
 
-test("DEFAULT_LLVM_TAG is llvmorg-23.1.2", () => {
-  assert.equal(DEFAULT_LLVM_TAG, "llvmorg-23.1.2");
+test("ensureLlvmProject throws when LLVM_VERSION and tag are not defined", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  const origTag = process.env.LLVM_TAG;
+  delete process.env.LLVM_VERSION;
+  delete process.env.LLVM_TAG;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-throw-"));
+  try {
+    assert.throws(
+      () => ensureLlvmProject(tmpDir, { dryRun: true }),
+      /LLVM_VERSION environment variable is not defined/
+    );
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    }
+    if (origTag !== undefined) {
+      process.env.LLVM_TAG = origTag;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("ensureLlvmProject uses LLVM_VERSION when tag is not specified", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  const origTag = process.env.LLVM_TAG;
+  delete process.env.LLVM_TAG;
+  process.env.LLVM_VERSION = "24.0.0";
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-ver-"));
+  try {
+    const targetFolder = path.join(tmpDir, "llvm-project");
+    const result = ensureLlvmProject(tmpDir, {
+      explicitLlvmDir: targetFolder,
+      dryRun: true,
+    });
+    assert.equal(result, targetFolder);
+    assert.ok(fs.existsSync(path.join(targetFolder, "llvm")));
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    } else {
+      delete process.env.LLVM_VERSION;
+    }
+    if (origTag !== undefined) {
+      process.env.LLVM_TAG = origTag;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

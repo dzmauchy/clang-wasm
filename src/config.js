@@ -202,6 +202,16 @@ export function resolveBuildConfig(options = {}) {
     options.ninjaJobs ??
     (process.env.NINJA_JOBS ? parseInt(process.env.NINJA_JOBS, 10) : 4);
 
+  const llvmTag =
+    options.llvmTag ||
+    process.env.LLVM_TAG ||
+    (process.env.LLVM_VERSION
+      ? `llvmorg-${process.env.LLVM_VERSION.trim()}`
+      : undefined);
+  if (!llvmTag) {
+    throw new Error("LLVM_VERSION environment variable is not defined");
+  }
+
   return {
     rootDir,
     llvmDir,
@@ -217,7 +227,7 @@ export function resolveBuildConfig(options = {}) {
     wasmOptPath,
     llvmStripPath,
     dryRun,
-    llvmTag: options.llvmTag || process.env.LLVM_TAG || "llvmorg-23.1.2",
+    llvmTag,
     emsdkVersion: options.emsdkVersion || process.env.EMSDK_VERSION || "6.0.9",
     hostLlvmDir,
     hostClangPath,

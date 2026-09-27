@@ -7,8 +7,6 @@ import {
 } from "../utils/fs.js";
 import { ensureLibicu } from "./ensure-libicu.js";
 
-export const DEFAULT_HOST_LLVM_VERSION = "23.1.2";
-
 export function getHostArchTag() {
   return process.arch === "arm64" ? "ARM64" : "X64";
 }
@@ -48,8 +46,10 @@ export function applyHostLlvmEnvironment(hostLlvmDir, dryRun) {
 export function ensureHostLlvm(rootDir, options = {}) {
   ensureOutDir(rootDir);
 
-  const version =
-    options.version || process.env.LLVM_VERSION || DEFAULT_HOST_LLVM_VERSION;
+  const version = options.version || process.env.LLVM_VERSION?.trim();
+  if (!version) {
+    throw new Error("LLVM_VERSION environment variable is not defined");
+  }
   const archTag = getHostArchTag();
   const dryRun = options.dryRun ?? false;
 

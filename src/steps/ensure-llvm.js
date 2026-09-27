@@ -3,7 +3,6 @@ import path from "node:path";
 import { run } from "../utils/exec.js";
 import { ensureOutDir, resolvePreferredLlvmDir } from "../utils/fs.js";
 
-export const DEFAULT_LLVM_TAG = "llvmorg-23.1.2";
 export const DEFAULT_LLVM_REPO = "https://github.com/llvm/llvm-project.git";
 
 export function ensureLlvmProject(rootDir, options = {}) {
@@ -14,7 +13,15 @@ export function ensureLlvmProject(rootDir, options = {}) {
       process.env.LLVM_DIR ||
       defaultDir
   );
-  const tag = options.tag || process.env.LLVM_TAG || DEFAULT_LLVM_TAG;
+  const tag =
+    options.tag ||
+    process.env.LLVM_TAG ||
+    (process.env.LLVM_VERSION
+      ? `llvmorg-${process.env.LLVM_VERSION.trim()}`
+      : undefined);
+  if (!tag) {
+    throw new Error("LLVM_VERSION environment variable is not defined");
+  }
   const repoUrl = options.repoUrl || DEFAULT_LLVM_REPO;
   const dryRun = options.dryRun ?? false;
 

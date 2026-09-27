@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { resolveBuildConfig } from "./config.js";
@@ -42,8 +43,8 @@ Usage:
 
 Options:
   --llvm-dir <path>         Path to the LLVM repository root (defaults to ./out/llvm-project)
-  --llvm-tag <tag>          LLVM git tag to fetch if missing (defaults to llvmorg-23.1.2)
-  --llvm-version <ver>      LLVM version for host binaries and source tag (defaults to 23.1.2)
+  --llvm-tag <tag>          LLVM git tag to fetch if missing (defaults to llvmorg-<llvm-version>)
+  --llvm-version <ver>      LLVM version for host binaries and source tag (defaults to LLVM_VERSION env)
   --host-llvm-dir <path>    Path to host LLVM binaries (defaults to ./out/llvm)
   --dist-dir <path>         Directory to output built artifacts (defaults to ./dist)
   --emsdk-dir <path>        Path to Emscripten SDK directory (defaults to ./out/emsdk)
@@ -57,7 +58,11 @@ Options:
 
   const rootDir = process.cwd();
   const isDryRun = Boolean(values["dry-run"]);
-  const llvmVersion = values["llvm-version"] || "23.1.2";
+  const llvmVersion = values["llvm-version"] || process.env.LLVM_VERSION?.trim();
+  if (!llvmVersion) {
+    throw new Error("LLVM_VERSION environment variable is not defined");
+  }
+  process.env.LLVM_VERSION = llvmVersion;
   const llvmTag = values["llvm-tag"] || `llvmorg-${llvmVersion}`;
 
   // Ensure out directory exists (preserves symlinks/existing dirs)
@@ -79,7 +84,7 @@ Options:
     dryRun: isDryRun,
   });
 
-  // 3. Ensure host LLVM 23 binaries (clang 23 and lld 23): download and unpack into out/llvm
+  // 3. Ensure host LLVM binaries: download and unpack into out/llvm
   const hostLlvm = ensureHostLlvm(rootDir, {
     explicitHostLlvmDir: values["host-llvm-dir"],
     version: llvmVersion,

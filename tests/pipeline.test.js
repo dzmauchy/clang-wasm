@@ -12,6 +12,7 @@ test("verifyArtifacts detects missing artifacts", () => {
   try {
     const config = resolveBuildConfig({
       distDir: tmpDir,
+      llvmTag: "test-tag",
       dryRun: true,
     });
 
@@ -24,7 +25,24 @@ test("verifyArtifacts detects missing artifacts", () => {
   }
 });
 
+test("main throws an error if LLVM_VERSION is not defined", async () => {
+  const origVersion = process.env.LLVM_VERSION;
+  delete process.env.LLVM_VERSION;
+  try {
+    await assert.rejects(
+      () => main(["--dry-run"]),
+      /LLVM_VERSION environment variable is not defined/
+    );
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    }
+  }
+});
+
 test("full dry-run pipeline generates and verifies all required artifacts", async () => {
+  const origVersion = process.env.LLVM_VERSION;
+  process.env.LLVM_VERSION = "20.0.0";
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clang-wasm-pipeline-"));
   try {
     await main(["--dry-run", "--dist-dir", tmpDir]);
@@ -37,6 +55,33 @@ test("full dry-run pipeline generates and verifies all required artifacts", asyn
       );
     }
   } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    } else {
+      delete process.env.LLVM_VERSION;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("main succeeds when --llvm-version CLI option is provided without LLVM_VERSION env", async () => {
+  const origVersion = process.env.LLVM_VERSION;
+  delete process.env.LLVM_VERSION;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clang-wasm-cli-"));
+  try {
+    await main(["--dry-run", "--dist-dir", tmpDir, "--llvm-version", "20.0.0"]);
+
+    for (const artifact of REQUIRED_ARTIFACTS) {
+      const artifactPath = path.join(tmpDir, artifact);
+      assert.ok(
+        fs.existsSync(artifactPath),
+        `Expected ${artifact} to exist in ${tmpDir}`
+      );
+    }
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

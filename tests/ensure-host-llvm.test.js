@@ -6,11 +6,21 @@ import path from "node:path";
 import {
   ensureHostLlvm,
   getHostArchTag,
-  DEFAULT_HOST_LLVM_VERSION,
 } from "../src/steps/ensure-host-llvm.js";
 
-test("DEFAULT_HOST_LLVM_VERSION is 23.1.2", () => {
-  assert.equal(DEFAULT_HOST_LLVM_VERSION, "23.1.2");
+test("ensureHostLlvm throws when LLVM_VERSION is not defined", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  delete process.env.LLVM_VERSION;
+  try {
+    assert.throws(
+      () => ensureHostLlvm("/tmp", { dryRun: true }),
+      /LLVM_VERSION environment variable is not defined/
+    );
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    }
+  }
 });
 
 test("getHostArchTag returns valid architecture tag", () => {
@@ -19,6 +29,8 @@ test("getHostArchTag returns valid architecture tag", () => {
 });
 
 test("ensureHostLlvm detects existing populated host LLVM directory and prefers ld.lld", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  process.env.LLVM_VERSION = "20.0.0";
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-exist-"));
   try {
     const binDir = path.join(tmpDir, "bin");
@@ -41,11 +53,18 @@ test("ensureHostLlvm detects existing populated host LLVM directory and prefers 
     assert.equal(process.env.CXX, path.join(binDir, "clang++"));
     assert.equal(process.env.LD, path.join(binDir, "ld.lld"));
   } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    } else {
+      delete process.env.LLVM_VERSION;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
 test("ensureHostLlvm falls back to lld when ld.lld does not exist", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  process.env.LLVM_VERSION = "20.0.0";
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-exist-lld-only-"));
   try {
     const binDir = path.join(tmpDir, "bin");
@@ -62,6 +81,11 @@ test("ensureHostLlvm falls back to lld when ld.lld does not exist", () => {
     assert.equal(info.lldPath, path.join(binDir, "lld"));
     assert.equal(process.env.LD, path.join(binDir, "lld"));
   } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    } else {
+      delete process.env.LLVM_VERSION;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
@@ -73,7 +97,7 @@ test("ensureHostLlvm sets mock binaries and paths in dry-run mode when directory
 
     const info = ensureHostLlvm(tmpDir, {
       explicitHostLlvmDir: targetFolder,
-      version: "23.1.2",
+      version: "20.0.0",
       dryRun: true,
     });
 
@@ -93,13 +117,34 @@ test("ensureHostLlvm defaults to out/llvm and ensures out directory", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-default-"));
   try {
     const info = ensureHostLlvm(tmpDir, {
-      version: "23.1.2",
+      version: "20.0.0",
       dryRun: true,
     });
 
     assert.equal(info.hostLlvmDir, path.join(tmpDir, "out", "llvm"));
     assert.ok(fs.existsSync(path.join(tmpDir, "out")));
   } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("ensureHostLlvm uses LLVM_VERSION when options.version is not specified", () => {
+  const origVersion = process.env.LLVM_VERSION;
+  process.env.LLVM_VERSION = "24.0.0";
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-env-"));
+  try {
+    const info = ensureHostLlvm(tmpDir, {
+      dryRun: true,
+    });
+
+    assert.equal(info.hostLlvmDir, path.join(tmpDir, "out", "llvm"));
+    assert.ok(fs.existsSync(info.clangXXPath));
+  } finally {
+    if (origVersion !== undefined) {
+      process.env.LLVM_VERSION = origVersion;
+    } else {
+      delete process.env.LLVM_VERSION;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
