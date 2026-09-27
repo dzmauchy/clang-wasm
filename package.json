@@ -1,0 +1,19 @@
+{
+  "name": "clang-wasm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Modular build toolchain for compiling Clang and LLD to WebAssembly with sysroot",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node src/index.ts",
+    "test": "node --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.2"
+  }
+}

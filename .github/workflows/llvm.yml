@@ -63,11 +63,9 @@ jobs:
           actions-cache-folder: 'emsdk-cache'
 
       - name: Build Clang, LLD and sysroot
-        working-directory: llvm-project
-        run: node ../.github/scripts/build-llvm-toolchain.mjs
+        run: npm run build
 
       - name: Publish GitHub Release
-        working-directory: llvm-project
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: clang-${{ inputs.llvm_version }}
