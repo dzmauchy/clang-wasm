@@ -66,3 +66,18 @@ test("ensureHostLlvm sets mock binaries and paths in dry-run mode when directory
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("ensureHostLlvm defaults to out/llvm and ensures out directory", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "host-llvm-test-default-"));
+  try {
+    const info = ensureHostLlvm(tmpDir, {
+      version: "23.1.2",
+      dryRun: true,
+    });
+
+    assert.equal(info.hostLlvmDir, path.join(tmpDir, "out", "llvm"));
+    assert.ok(fs.existsSync(path.join(tmpDir, "out")));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { run } from "../utils/exec.js";
-import { isDirectoryWritable, DEFAULT_SHARED_DIR } from "../utils/fs.js";
+import { ensureOutDir, resolvePreferredEmsdkDir } from "../utils/fs.js";
 
 export const DEFAULT_EMSDK_VERSION = "6.0.9";
 export const DEFAULT_EMSDK_REPO = "https://github.com/emscripten-core/emsdk.git";
@@ -52,10 +52,10 @@ export function applyEmsdkEnvironment(emsdkDir, dryRun) {
 }
 
 export function ensureEmsdk(rootDir, options = {}) {
+  ensureOutDir(rootDir);
   const version = options.version || process.env.EMSDK_VERSION || DEFAULT_EMSDK_VERSION;
   const repoUrl = options.repoUrl || DEFAULT_EMSDK_REPO;
   const dryRun = options.dryRun ?? false;
-  const sharedDir = options.sharedDir || DEFAULT_SHARED_DIR;
 
   // 1. If explicitEmsdkDir was provided
   if (options.explicitEmsdkDir) {
@@ -67,16 +67,12 @@ export function ensureEmsdk(rootDir, options = {}) {
     }
   }
 
-  // 2. Determine target directory: prefer /opt/shared/emsdk if /opt/shared exists and is writable
-  const sharedWritable = isDirectoryWritable(sharedDir);
+  // 2. Determine target directory: prefer process.env.EMSDK or out/emsdk
   let targetDir;
-
-  if (sharedWritable) {
-    targetDir = path.join(sharedDir, "emsdk");
-  } else if (process.env.EMSDK) {
+  if (process.env.EMSDK) {
     targetDir = path.resolve(process.env.EMSDK);
   } else {
-    targetDir = path.resolve(rootDir, "emsdk");
+    targetDir = resolvePreferredEmsdkDir(rootDir);
   }
 
   // Check if target directory already exists and has emsdk installed

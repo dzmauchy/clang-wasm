@@ -2,9 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { run } from "../utils/exec.js";
 import {
-  DEFAULT_SHARED_DIR,
+  ensureOutDir,
   resolvePreferredHostLlvmDir,
 } from "../utils/fs.js";
+import { ensureLibicu } from "./ensure-libicu.js";
 
 export const DEFAULT_HOST_LLVM_VERSION = "23.1.2";
 
@@ -14,6 +15,8 @@ export function getHostArchTag() {
 
 export function applyHostLlvmEnvironment(hostLlvmDir, dryRun) {
   const binDir = path.join(hostLlvmDir, "bin");
+  const libDir = path.join(hostLlvmDir, "lib");
+
   process.env.CC = path.join(binDir, "clang");
   process.env.CXX = path.join(binDir, "clang++");
   process.env.LD = path.join(binDir, "lld");
@@ -27,19 +30,30 @@ export function applyHostLlvmEnvironment(hostLlvmDir, dryRun) {
   if (!existingParts.has(binDir)) {
     process.env.PATH = `${binDir}${path.delimiter}${currentPath}`;
   }
+
+  const currentLdPath = process.env.LD_LIBRARY_PATH || "";
+  const existingLdParts = new Set(
+    currentLdPath.split(path.delimiter).filter(Boolean)
+  );
+  if (!existingLdParts.has(libDir)) {
+    process.env.LD_LIBRARY_PATH = currentLdPath
+      ? `${libDir}${path.delimiter}${currentLdPath}`
+      : libDir;
+  }
 }
 
 export function ensureHostLlvm(rootDir, options = {}) {
+  ensureOutDir(rootDir);
+
   const version =
     options.version || process.env.LLVM_VERSION || DEFAULT_HOST_LLVM_VERSION;
   const archTag = getHostArchTag();
   const dryRun = options.dryRun ?? false;
-  const sharedDir = options.sharedDir || DEFAULT_SHARED_DIR;
 
   const targetDir = path.resolve(
     options.explicitHostLlvmDir ||
       process.env.HOST_LLVM_DIR ||
-      resolvePreferredHostLlvmDir(rootDir, sharedDir)
+      resolvePreferredHostLlvmDir(rootDir)
   );
 
   const binDir = path.join(targetDir, "bin");
@@ -60,6 +74,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
       `Using existing host LLVM ${version} binaries at: ${targetDir}`
     );
     applyHostLlvmEnvironment(targetDir, dryRun);
+    ensureLibicu(targetDir, { dryRun });
     return {
       hostLlvmDir: targetDir,
       clangPath,
@@ -89,6 +104,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
     fs.chmodSync(lldPath, 0o755);
     fs.chmodSync(llvmStripPath, 0o755);
     applyHostLlvmEnvironment(targetDir, true);
+    ensureLibicu(targetDir, { dryRun: true });
     return {
       hostLlvmDir: targetDir,
       clangPath,
@@ -108,6 +124,7 @@ export function ensureHostLlvm(rootDir, options = {}) {
   );
 
   applyHostLlvmEnvironment(targetDir, false);
+  ensureLibicu(targetDir, { dryRun: false });
 
   const finalLldPath = fs.existsSync(lldPath) ? lldPath : ldLldPath;
   console.log(`Successfully installed host LLVM ${version} to: ${targetDir}`);

@@ -1,50 +1,45 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const DEFAULT_SHARED_DIR = "/opt/shared";
-
-export function isDirectoryWritable(dirPath) {
+/**
+ * Ensures the project's 'out' directory exists.
+ * If 'out' doesn't exist, creates it.
+ * If 'out' or a symlink to another directory already exists, NEVER deletes it.
+ * If 'out' is a symlink to a non-existent target, creates the target directory.
+ */
+export function ensureOutDir(rootDir = process.cwd()) {
+  const outDir = path.join(rootDir, "out");
   try {
-    if (!fs.existsSync(dirPath)) {
-      return false;
+    const lstat = fs.lstatSync(outDir);
+    if (lstat.isSymbolicLink()) {
+      const linkTarget = fs.readlinkSync(outDir);
+      const resolvedTarget = path.resolve(path.dirname(outDir), linkTarget);
+      if (!fs.existsSync(resolvedTarget)) {
+        fs.mkdirSync(resolvedTarget, { recursive: true });
+      }
     }
-    const stat = fs.statSync(dirPath);
-    if (!stat.isDirectory()) {
-      return false;
+    return outDir;
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      fs.mkdirSync(outDir, { recursive: true });
+      return outDir;
     }
-    fs.accessSync(dirPath, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
+    throw err;
   }
 }
 
-export function resolvePreferredLlvmDir(
-  rootDir,
-  sharedDir = DEFAULT_SHARED_DIR
-) {
-  if (isDirectoryWritable(sharedDir)) {
-    return path.join(sharedDir, "llvm-project");
-  }
-  return path.join(rootDir, "llvm-project");
+export function getOutDir(rootDir = process.cwd()) {
+  return path.join(rootDir, "out");
 }
 
-export function resolvePreferredEmsdkDir(
-  rootDir,
-  sharedDir = DEFAULT_SHARED_DIR
-) {
-  if (isDirectoryWritable(sharedDir)) {
-    return path.join(sharedDir, "emsdk");
-  }
-  return path.join(rootDir, "emsdk");
+export function resolvePreferredLlvmDir(rootDir = process.cwd()) {
+  return path.join(rootDir, "out", "llvm-project");
 }
 
-export function resolvePreferredHostLlvmDir(
-  rootDir,
-  sharedDir = DEFAULT_SHARED_DIR
-) {
-  if (isDirectoryWritable(sharedDir)) {
-    return path.join(sharedDir, "llvm");
-  }
-  return path.join(rootDir, "llvm");
+export function resolvePreferredEmsdkDir(rootDir = process.cwd()) {
+  return path.join(rootDir, "out", "emsdk");
+}
+
+export function resolvePreferredHostLlvmDir(rootDir = process.cwd()) {
+  return path.join(rootDir, "out", "llvm");
 }

@@ -2,8 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { cleanFlags } from "./utils/exec.js";
 import {
-  DEFAULT_SHARED_DIR,
-  isDirectoryWritable,
+  ensureOutDir,
   resolvePreferredLlvmDir,
   resolvePreferredEmsdkDir,
   resolvePreferredHostLlvmDir,
@@ -136,17 +135,15 @@ export function resolveBuildConfig(options = {}) {
   const rootDir = path.resolve(options.rootDir || process.cwd());
   const dryRun = options.dryRun ?? (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true");
 
-  const sharedDir = options.sharedDir || DEFAULT_SHARED_DIR;
+  ensureOutDir(rootDir);
 
   let emsdkDir;
   if (options.emsdkDir) {
     emsdkDir = path.resolve(options.emsdkDir);
-  } else if (isDirectoryWritable(sharedDir)) {
-    emsdkDir = path.join(sharedDir, "emsdk");
   } else if (process.env.EMSDK) {
     emsdkDir = path.resolve(process.env.EMSDK);
   } else {
-    emsdkDir = path.resolve(rootDir, "emsdk");
+    emsdkDir = resolvePreferredEmsdkDir(rootDir);
   }
 
   // Resolve LLVM source root
@@ -155,16 +152,8 @@ export function resolveBuildConfig(options = {}) {
     llvmDir = path.resolve(options.llvmDir);
   } else if (process.env.LLVM_DIR) {
     llvmDir = path.resolve(process.env.LLVM_DIR);
-  } else if (isDirectoryWritable(sharedDir)) {
-    llvmDir = path.join(sharedDir, "llvm-project");
-  } else if (fs.existsSync(path.join(rootDir, "llvm-project", "llvm"))) {
-    llvmDir = path.join(rootDir, "llvm-project");
-  } else if (fs.existsSync(path.join(rootDir, "llvm-project"))) {
-    llvmDir = path.join(rootDir, "llvm-project");
-  } else if (fs.existsSync(path.join(rootDir, "llvm"))) {
-    llvmDir = rootDir;
   } else {
-    llvmDir = path.join(rootDir, "llvm-project");
+    llvmDir = resolvePreferredLlvmDir(rootDir);
   }
 
   const distDir = path.resolve(
@@ -183,7 +172,7 @@ export function resolveBuildConfig(options = {}) {
   const hostLlvmDir = path.resolve(
     options.hostLlvmDir ||
       process.env.HOST_LLVM_DIR ||
-      resolvePreferredHostLlvmDir(rootDir, sharedDir)
+      resolvePreferredHostLlvmDir(rootDir)
   );
   const hostBinDir = path.join(hostLlvmDir, "bin");
   const hostClangPath = options.hostClangPath || path.join(hostBinDir, "clang");

@@ -41,6 +41,20 @@ test("ensureLlvmProject creates mock directory in dry-run mode if missing", () =
   }
 });
 
+test("ensureLlvmProject defaults to out/llvm-project and ensures out directory", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "llvm-test-default-"));
+  try {
+    const result = ensureLlvmProject(tmpDir, {
+      dryRun: true,
+    });
+
+    assert.equal(result, path.join(tmpDir, "out", "llvm-project"));
+    assert.ok(fs.existsSync(path.join(tmpDir, "out")));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("DEFAULT_LLVM_TAG is llvmorg-23.1.2", () => {
   assert.equal(DEFAULT_LLVM_TAG, "llvmorg-23.1.2");
 });

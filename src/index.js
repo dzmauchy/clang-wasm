@@ -1,9 +1,11 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { resolveBuildConfig } from "./config.js";
+import { ensureOutDir } from "./utils/fs.js";
 import { ensureEmsdk } from "./steps/ensure-emsdk.js";
 import { ensureLlvmProject } from "./steps/ensure-llvm.js";
 import { ensureHostLlvm } from "./steps/ensure-host-llvm.js";
+import { ensureLibicu } from "./steps/ensure-libicu.js";
 import { pruneEmscriptenHeaders } from "./steps/prune-headers.js";
 import { buildEmscriptenSysroot } from "./steps/build-sysroot-libs.js";
 import { buildNativeTableGen } from "./steps/build-native-tools.js";
@@ -23,7 +25,6 @@ export async function main(args = process.argv.slice(2)) {
       "dist-dir": { type: "string" },
       "emsdk-dir": { type: "string" },
       "emsdk-version": { type: "string" },
-      "shared-dir": { type: "string" },
       jobs: { type: "string", short: "j" },
       "dry-run": { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -40,14 +41,13 @@ Usage:
   node src/index.js [options]
 
 Options:
-  --llvm-dir <path>         Path to the LLVM repository root (defaults to /opt/shared/llvm-project or ./llvm-project)
+  --llvm-dir <path>         Path to the LLVM repository root (defaults to ./out/llvm-project)
   --llvm-tag <tag>          LLVM git tag to fetch if missing (defaults to llvmorg-23.1.2)
   --llvm-version <ver>      LLVM version for host binaries and source tag (defaults to 23.1.2)
-  --host-llvm-dir <path>    Path to host LLVM binaries (defaults to /opt/shared/llvm or ./llvm)
+  --host-llvm-dir <path>    Path to host LLVM binaries (defaults to ./out/llvm)
   --dist-dir <path>         Directory to output built artifacts (defaults to ./dist)
-  --emsdk-dir <path>        Path to Emscripten SDK directory (defaults to /opt/shared/emsdk or ./emsdk)
+  --emsdk-dir <path>        Path to Emscripten SDK directory (defaults to ./out/emsdk)
   --emsdk-version <ver>     Emscripten version to install if EMSDK not set (defaults to 6.0.9)
-  --shared-dir <path>       Shared tools directory to prefer if writable (defaults to /opt/shared)
   -j, --jobs <n>            Number of parallel ninja build jobs (defaults to 4)
   --dry-run                 Simulate the build pipeline without running compilation commands
   -h, --help                Show this help message
@@ -57,33 +57,37 @@ Options:
 
   const rootDir = process.cwd();
   const isDryRun = Boolean(values["dry-run"]);
-  const sharedDir = values["shared-dir"];
   const llvmVersion = values["llvm-version"] || "23.1.2";
   const llvmTag = values["llvm-tag"] || `llvmorg-${llvmVersion}`;
 
+  // Ensure out directory exists (preserves symlinks/existing dirs)
+  ensureOutDir(rootDir);
+
   console.log("=== LLVM WebAssembly Toolchain Builder ===");
 
-  // 1. Ensure EMSDK: if not set, download emsdk 6.0.9 and use it (prefer /opt/shared/emsdk)
+  // 1. Ensure EMSDK: if not set, download emsdk 6.0.9 and use it in out/emsdk
   const emsdkDir = ensureEmsdk(rootDir, {
     explicitEmsdkDir: values["emsdk-dir"],
     version: values["emsdk-version"],
-    sharedDir,
     dryRun: isDryRun,
   });
 
-  // 2. Ensure LLVM source: if llvm-project doesn't exist, fetch ONLY one tag (prefer /opt/shared/llvm-project)
+  // 2. Ensure LLVM source: fetch single tag into out/llvm-project
   const llvmDir = ensureLlvmProject(rootDir, {
     explicitLlvmDir: values["llvm-dir"],
     tag: llvmTag,
-    sharedDir,
     dryRun: isDryRun,
   });
 
-  // 3. Ensure host LLVM 23 binaries (clang 23 and lld 23): download and unpack if missing (prefer /opt/shared/llvm)
+  // 3. Ensure host LLVM 23 binaries (clang 23 and lld 23): download and unpack into out/llvm
   const hostLlvm = ensureHostLlvm(rootDir, {
     explicitHostLlvmDir: values["host-llvm-dir"],
     version: llvmVersion,
-    sharedDir,
+    dryRun: isDryRun,
+  });
+
+  // 4. Ensure libicu 70 in out/llvm/lib if system does not provide it
+  ensureLibicu(hostLlvm.hostLlvmDir, {
     dryRun: isDryRun,
   });
 
@@ -101,7 +105,6 @@ Options:
     dryRun: isDryRun,
     llvmTag,
     emsdkVersion: values["emsdk-version"],
-    sharedDir,
   });
 
   console.log(`LLVM source dir:  ${config.llvmDir}`);

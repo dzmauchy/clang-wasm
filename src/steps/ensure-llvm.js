@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { run } from "../utils/exec.js";
-import { resolvePreferredLlvmDir } from "../utils/fs.js";
+import { ensureOutDir, resolvePreferredLlvmDir } from "../utils/fs.js";
 
 export const DEFAULT_LLVM_TAG = "llvmorg-23.1.2";
 export const DEFAULT_LLVM_REPO = "https://github.com/llvm/llvm-project.git";
 
 export function ensureLlvmProject(rootDir, options = {}) {
-  const defaultDir = resolvePreferredLlvmDir(rootDir, options.sharedDir);
+  ensureOutDir(rootDir);
+  const defaultDir = resolvePreferredLlvmDir(rootDir);
   const llvmDir = path.resolve(
     options.explicitLlvmDir ||
       process.env.LLVM_DIR ||

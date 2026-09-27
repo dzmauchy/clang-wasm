@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   resolveBuildConfig,
   CLANG_HEADER_PRUNE_PATTERN,
@@ -7,20 +10,23 @@ import {
   EMSCRIPTEN_PRUNE_DIRS,
 } from "../src/config.js";
 
-test("resolveBuildConfig resolves emsdkDir to fallback when EMSDK is missing and sharedDir is not writable", () => {
+test("resolveBuildConfig resolves directories to out/xxx when options and env are missing", () => {
   const origEmsdk = process.env.EMSDK;
   delete process.env.EMSDK;
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-test-"));
   try {
     const config = resolveBuildConfig({
-      rootDir: "/test-root",
-      sharedDir: "/non_existent_dir_12345",
+      rootDir: tmpRoot,
       dryRun: true,
     });
-    assert.equal(config.emsdkDir, "/test-root/emsdk");
+    assert.equal(config.emsdkDir, path.join(tmpRoot, "out", "emsdk"));
+    assert.equal(config.llvmDir, path.join(tmpRoot, "out", "llvm-project"));
+    assert.equal(config.hostLlvmDir, path.join(tmpRoot, "out", "llvm"));
   } finally {
     if (origEmsdk !== undefined) {
       process.env.EMSDK = origEmsdk;
     }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
 
