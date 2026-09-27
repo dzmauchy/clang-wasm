@@ -146,7 +146,6 @@ const exeLinkerFlags = cleanFlags(`
   -sENVIRONMENT=web,worker
   -sPOLYFILL=0
   -sFILESYSTEM=1
-  -sWASM_BIGINT=1
   -sASSERTIONS=0
   -sSTACK_SIZE=16MB
   -sMALLOC=dlmalloc
@@ -274,6 +273,7 @@ for (const tool of ["clang", "lld"]) {
       --enable-extended-const
       --enable-mutable-globals
       --enable-nontrapping-float-to-int
+      --enable-multivalue
       --enable-sign-ext
       --enable-tail-call
       --disable-gc
