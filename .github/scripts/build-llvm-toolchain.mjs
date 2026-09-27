@@ -103,7 +103,6 @@ const cxxFlags = cleanFlags(`
   -msign-ext
   -mnontrapping-fptoint
   -mreference-types
-  -msimd128
 `);
 
 const cFlags = cleanFlags(`
@@ -119,13 +118,11 @@ const cFlags = cleanFlags(`
   -msign-ext
   -mnontrapping-fptoint
   -mreference-types
-  -msimd128
 `);
 
 const exeLinkerFlags = cleanFlags(`
   -Oz
   -Wl,--gc-sections
-  -Wl,-O3
   -Wl,--compress-relocations
   -mbulk-memory
   -mextended-const
@@ -134,8 +131,9 @@ const exeLinkerFlags = cleanFlags(`
   -msign-ext
   -mnontrapping-fptoint
   -mreference-types
-  -msimd128
-  -sEVAL_CTORS=1
+  -sEVAL_CTORS=2
+  -sSTACK_OVERFLOW_CHECK=0
+  -sAUTO_JS_LIBRARIES=0
   -sALLOW_MEMORY_GROWTH=1
   -sINITIAL_MEMORY=256MB
   -sMAXIMUM_MEMORY=2GB
@@ -147,10 +145,11 @@ const exeLinkerFlags = cleanFlags(`
   -sEXPORT_ES6=1
   -sENVIRONMENT=web,worker
   -sPOLYFILL=0
-  -sGROWABLE_ARRAYBUFFERS=1
   -sFILESYSTEM=1
-  -sASSERTIONS=1
+  -sWASM_BIGINT=1
+  -sASSERTIONS=0
   -sSTACK_SIZE=16MB
+  -sMALLOC=dlmalloc
 `);
 
 run(`
@@ -273,16 +272,12 @@ for (const tool of ["clang", "lld"]) {
       --enable-bulk-memory-opt
       --enable-call-indirect-overlong
       --enable-extended-const
-      --enable-multivalue
       --enable-mutable-globals
       --enable-nontrapping-float-to-int
-      --enable-reference-types
       --enable-sign-ext
       --enable-tail-call
-      --enable-simd
       --disable-gc
       --disable-custom-descriptors
-      --disable-compact-imports
       --disable-strings
       --disable-memory64
       --disable-shared-everything
