@@ -7,6 +7,8 @@ export function buildWasmBinaries(config) {
     `
     emcmake cmake -G Ninja -B build-wasm -S llvm
       -DCMAKE_BUILD_TYPE=MinSizeRel
+      -DCMAKE_C_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
+      -DCMAKE_CXX_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
       -DLLVM_ENABLE_ASSERTIONS=OFF
       -DLLVM_ENABLE_PROJECTS="clang;lld"
       -DLLVM_TARGETS_TO_BUILD="WebAssembly"
