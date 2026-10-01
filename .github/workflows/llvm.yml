@@ -42,10 +42,21 @@ jobs:
           if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$TAG_NAME" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
           fi
+          # Drop a tag left behind when a previous attempt published the ref
+          # but failed before creating the release.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            git push origin ":refs/tags/${TAG_NAME}"
+          fi
+          # The Releases API returns 403 for GITHUB_TOKEN when target_commitish
+          # has no branch or tag and its workflow files differ from the default
+          # branch (main often moves during this build). Push the tag first so
+          # the commit already has a ref, then create the release without --target.
+          # Checkout persists credentials, which this push uses.
+          git tag "$TAG_NAME" "$GITHUB_SHA"
+          git push origin "refs/tags/${TAG_NAME}"
           echo "Creating release $TAG_NAME..."
           gh release create "$TAG_NAME" "${assets[@]}" \
             --latest=false \
-            --target "$GITHUB_SHA" \
             --title "LLVM $TAG_NAME" \
             --notes "LLVM toolchain WebAssembly binaries built from llvmorg-${{ inputs.llvm_version }}." \
             --repo "$GITHUB_REPOSITORY"
