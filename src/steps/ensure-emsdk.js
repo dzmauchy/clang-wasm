@@ -4,7 +4,7 @@ import path from "node:path";
 import { run } from "../utils/exec.js";
 import { ensureOutDir, resolvePreferredEmsdkDir } from "../utils/fs.js";
 
-export const DEFAULT_EMSDK_VERSION = "6.0.9";
+export const DEFAULT_EMSDK_VERSION = "6.0.10";
 export const DEFAULT_EMSDK_REPO = "https://github.com/emscripten-core/emsdk.git";
 
 export function applyEmsdkEnvironment(emsdkDir, dryRun) {

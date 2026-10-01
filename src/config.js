@@ -88,16 +88,17 @@ export const EXE_LINKER_FLAGS = cleanFlags(`
   -sMAXIMUM_MEMORY=2GB
   -sDISABLE_EXCEPTION_CATCHING=1
   -sTEXTDECODER=2
-  -sEXPORTED_RUNTIME_METHODS=FS,callMain
+  -sEXPORTED_RUNTIME_METHODS=FS,PROXYFS,callMain
   -sEXPORT_NAME=createModule
   -sMODULARIZE=1
   -sEXPORT_ES6=1
-  -sENVIRONMENT=web,worker
+  -sENVIRONMENT=worker
   -sPOLYFILL=0
   -sFILESYSTEM=1
+  -lproxyfs.js
   -sASSERTIONS=0
   -sSTACK_SIZE=16MB
-  -sMALLOC=dlmalloc
+  -sMALLOC=emmalloc
 `);
 
 export const WASM_OPT_FLAGS = Object.freeze([
