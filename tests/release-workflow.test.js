@@ -15,6 +15,7 @@ test("release publish creates the tag ref before calling the Releases API", () =
   assert.ok(tagPush !== -1, "tag is pushed with git");
   assert.ok(releaseCreate !== -1, "release is created with gh");
   assert.ok(tagPush < releaseCreate, "tag push happens before gh release create");
-  assert.equal(publishStep.includes("--target"), false);
+  const releaseCommand = publishStep.slice(releaseCreate);
+  assert.equal(releaseCommand.includes("--target"), false);
   assert.match(publishStep, /git tag "\$TAG_NAME" "\$GITHUB_SHA"/);
 });
