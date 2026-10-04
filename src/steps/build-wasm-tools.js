@@ -1,4 +1,7 @@
-import { run } from "../utils/exec.js";
+import { fileURLToPath } from "node:url";
+import { run, shellQuote } from "../utils/exec.js";
+
+const wasmLldSourceDir = fileURLToPath(new URL("../../cmake/wasm-lld/", import.meta.url));
 
 export function buildWasmBinaries(config) {
   console.log("\n--- Cross-Compiling Clang & LLD to Wasm ---");
@@ -11,6 +14,9 @@ export function buildWasmBinaries(config) {
       -DCMAKE_CXX_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
       -DLLVM_ENABLE_ASSERTIONS=OFF
       -DLLVM_ENABLE_PROJECTS="clang;lld"
+      -DLLVM_EXTERNAL_PROJECTS=wasm-lld
+      -DLLVM_EXTERNAL_WASM_LLD_SOURCE_DIR=${shellQuote(wasmLldSourceDir)}
+      -DLLD_BUILD_TOOLS=OFF
       -DLLVM_TARGETS_TO_BUILD="WebAssembly"
       -DLLVM_DEFAULT_TARGET_TRIPLE="wasm32-unknown-unknown"
       -DLLVM_NATIVE_TOOL_DIR="${config.nativeBinDir}"
@@ -90,7 +96,7 @@ export function buildWasmBinaries(config) {
     `
     ninja -C build-wasm -j ${config.ninjaJobs}
       clang
-      lld
+      wasm-lld
     `,
     config.llvmDir,
     {},

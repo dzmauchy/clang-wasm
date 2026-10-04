@@ -10,8 +10,11 @@ export function optimizeWasmBinaries(config) {
   fs.mkdirSync(config.distDir, { recursive: true });
 
   for (const tool of TOOLS) {
-    const srcWasm = path.join(config.wasmBinDir, `${tool}.wasm`);
-    const srcJs = path.join(config.wasmBinDir, `${tool}.js`);
+    const sourceDir = tool === "lld"
+      ? path.join(config.wasmBinDir, "wasm-only")
+      : config.wasmBinDir;
+    const srcWasm = path.join(sourceDir, `${tool}.wasm`);
+    const srcJs = path.join(sourceDir, `${tool}.js`);
     const outWasm = path.join(config.distDir, `${tool}.wasm`);
     const outJs = path.join(config.distDir, `${tool}.js`);
 

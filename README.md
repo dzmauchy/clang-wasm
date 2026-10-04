@@ -7,6 +7,14 @@ Emscripten builds the compiler tools; programs compiled with the packaged
 sysroot use LLVM libc, libc++, and libc++abi with explicit browser imports.
 Clang's default C++ standard library is libc++.
 
+The browser linker contains only LLD's WebAssembly driver. A launcher in
+`cmake/wasm-lld` is registered through `LLVM_EXTERNAL_PROJECTS` and links
+`lldWasm` and `lldCommon`, without changing LLVM's sources. The pipeline builds
+the `wasm-lld` target instead of LLVM's multi-format `lld` executable, leaving
+the ELF, COFF, Mach-O, and MinGW driver libraries out of this build. Its outputs
+in `build-wasm/bin/wasm-only` are packaged as `dist/lld.{js,wasm}`. Wasm is the
+default flavor; `-flavor wasm` is also accepted.
+
 The build host needs Node.js 24+, Git, CMake 3.24+, Ninja, Python 3 with PyYAML, and
 Clang/LLVM tools with the WebAssembly backend. The pipeline downloads host
 LLVM, LLVM sources, and Emscripten when needed. CMake builds LLVM libc,
@@ -149,6 +157,13 @@ constructors, and heap reservation, exhaustion, `calloc`, and `realloc`.
 It also checks trapping `new` and non-throwing allocation. A restricted-memory instance
 checks that failed heap reservation returns null with `ENOMEM`. Tests compile
 against the extracted archive and check the explicit browser imports.
+
+`npm run test-lld` tests the packaged browser linker using Node workers and
+the host Clang in `out/llvm` (or `HOST_LLVM_DIR`). It links Wasm objects and
+LLVM bitcode, executes the resulting export, and checks that other linker
+flavors and ELF, COFF, and Mach-O inputs are rejected. To test an unpackaged
+build, pass its output directory, for example:
+`npm run test-lld -- out/llvm-project/build-wasm/bin/wasm-only`.
 
 The Wasm adaptation uses LLVM libc's [full-build configuration](https://libc.llvm.org/build_concepts.html)
 and its [bare-metal I/O hooks](https://github.com/llvm/llvm-project/blob/main/libc/src/__support/OSUtil/baremetal/io.h).
