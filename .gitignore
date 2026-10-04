@@ -4,3 +4,4 @@ dist/
 build-native/
 build-wasm/
 /out
+examples/program.wasm

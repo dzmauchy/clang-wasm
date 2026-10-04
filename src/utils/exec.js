@@ -1,5 +1,9 @@
 import { execSync } from "node:child_process";
 
+export function shellQuote(value) {
+  return "'" + String(value).replaceAll("'", "'\\''") + "'";
+}
+
 export function cleanFlags(str) {
   return str.trim().split(/\s+/v).join(" ");
 }

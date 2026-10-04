@@ -3,16 +3,14 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { resolveBuildConfig } from "./config.js";
 import { ensureOutDir } from "./utils/fs.js";
-import { ensureEmsdk } from "./steps/ensure-emsdk.js";
+import { ensureEmsdk, DEFAULT_EMSDK_VERSION } from "./steps/ensure-emsdk.js";
 import { ensureLlvmProject } from "./steps/ensure-llvm.js";
 import { ensureHostLlvm } from "./steps/ensure-host-llvm.js";
 import { ensureLibicu } from "./steps/ensure-libicu.js";
-import { pruneEmscriptenHeaders } from "./steps/prune-headers.js";
-import { buildEmscriptenSysroot } from "./steps/build-sysroot-libs.js";
+import { buildSysroot } from "./steps/build-sysroot.js";
 import { buildNativeTableGen } from "./steps/build-native-tools.js";
 import { buildWasmBinaries } from "./steps/build-wasm-tools.js";
 import { optimizeWasmBinaries } from "./steps/optimize-binaries.js";
-import { assembleSysroot } from "./steps/assemble-sysroot.js";
 import { verifyArtifacts } from "./steps/verify-artifacts.js";
 
 export async function main(args = process.argv.slice(2)) {
@@ -48,7 +46,7 @@ Options:
   --host-llvm-dir <path>    Path to host LLVM binaries (defaults to ./out/llvm)
   --dist-dir <path>         Directory to output built artifacts (defaults to ./dist)
   --emsdk-dir <path>        Path to Emscripten SDK directory (defaults to ./out/emsdk)
-  --emsdk-version <ver>     Emscripten version to install if EMSDK not set (defaults to 6.0.9)
+  --emsdk-version <ver>     Emscripten version to install if EMSDK not set (defaults to ${DEFAULT_EMSDK_VERSION})
   -j, --jobs <n>            Number of parallel ninja build jobs (defaults to 4)
   --dry-run                 Simulate the build pipeline without running compilation commands
   -h, --help                Show this help message
@@ -70,7 +68,7 @@ Options:
 
   console.log("=== LLVM WebAssembly Toolchain Builder ===");
 
-  // 1. Ensure EMSDK: if not set, download emsdk 6.0.9 and use it in out/emsdk
+  // 1. Ensure EMSDK for building the browser-hosted compiler and linker.
   const emsdkDir = ensureEmsdk(rootDir, {
     explicitEmsdkDir: values["emsdk-dir"],
     version: values["emsdk-version"],
@@ -125,12 +123,10 @@ Options:
 
   const startTime = Date.now();
 
-  pruneEmscriptenHeaders(config);
-  buildEmscriptenSysroot(config);
   buildNativeTableGen(config);
   buildWasmBinaries(config);
   optimizeWasmBinaries(config);
-  assembleSysroot(config);
+  buildSysroot(config);
   verifyArtifacts(config);
 
   const totalTimeSeconds = ((Date.now() - startTime) / 1000).toFixed(1);

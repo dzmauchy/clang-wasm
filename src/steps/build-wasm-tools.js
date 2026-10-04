@@ -1,7 +1,7 @@
 import { run } from "../utils/exec.js";
 
 export function buildWasmBinaries(config) {
-  console.log("\n--- [4/5] Cross-Compiling Clang & LLD to Wasm ---");
+  console.log("\n--- Cross-Compiling Clang & LLD to Wasm ---");
 
   run(
     `
@@ -12,7 +12,7 @@ export function buildWasmBinaries(config) {
       -DLLVM_ENABLE_ASSERTIONS=OFF
       -DLLVM_ENABLE_PROJECTS="clang;lld"
       -DLLVM_TARGETS_TO_BUILD="WebAssembly"
-      -DLLVM_DEFAULT_TARGET_TRIPLE="wasm32-unknown-emscripten"
+      -DLLVM_DEFAULT_TARGET_TRIPLE="wasm32-unknown-unknown"
       -DLLVM_NATIVE_TOOL_DIR="${config.nativeBinDir}"
       -DLLVM_ENABLE_THREADS=OFF
       -DLLVM_ENABLE_BACKTRACES=OFF

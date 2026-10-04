@@ -44,6 +44,8 @@ test("full dry-run pipeline generates and verifies all required artifacts", asyn
   const origVersion = process.env.LLVM_VERSION;
   process.env.LLVM_VERSION = "20.0.0";
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clang-wasm-pipeline-"));
+  const previousCwd = process.cwd();
+  process.chdir(tmpDir);
   try {
     await main(["--dry-run", "--dist-dir", tmpDir]);
 
@@ -55,6 +57,7 @@ test("full dry-run pipeline generates and verifies all required artifacts", asyn
       );
     }
   } finally {
+    process.chdir(previousCwd);
     if (origVersion !== undefined) {
       process.env.LLVM_VERSION = origVersion;
     } else {
@@ -68,6 +71,8 @@ test("main succeeds when --llvm-version CLI option is provided without LLVM_VERS
   const origVersion = process.env.LLVM_VERSION;
   delete process.env.LLVM_VERSION;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clang-wasm-cli-"));
+  const previousCwd = process.cwd();
+  process.chdir(tmpDir);
   try {
     await main(["--dry-run", "--dist-dir", tmpDir, "--llvm-version", "20.0.0"]);
 
@@ -79,6 +84,7 @@ test("main succeeds when --llvm-version CLI option is provided without LLVM_VERS
       );
     }
   } finally {
+    process.chdir(previousCwd);
     if (origVersion !== undefined) {
       process.env.LLVM_VERSION = origVersion;
     }

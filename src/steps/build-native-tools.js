@@ -1,7 +1,7 @@
 import { run } from "../utils/exec.js";
 
 export function buildNativeTableGen(config) {
-  console.log("\n--- [3/5] Building Native TableGen Tools ---");
+  console.log("\n--- Building Native TableGen Tools ---");
 
   run(
     `

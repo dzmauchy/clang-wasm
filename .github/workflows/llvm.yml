@@ -28,10 +28,16 @@ jobs:
         with:
           node-version: latest
 
+      - name: Install sysroot build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build python3 python3-yaml
+
       - name: Build Clang, LLD and sysroot
         env:
           LLVM_VERSION: ${{ inputs.llvm_version }}
         run: npm run build
+
+      - name: Verify sysroot runtime
+        run: ctest --test-dir out/build-sysroot --output-on-failure
 
       - name: Publish GitHub Release
         env:

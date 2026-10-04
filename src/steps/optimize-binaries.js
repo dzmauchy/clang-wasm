@@ -5,7 +5,7 @@ import { run } from "../utils/exec.js";
 const TOOLS = Object.freeze(["clang", "lld"]);
 
 export function optimizeWasmBinaries(config) {
-  console.log("\n--- [5/5] Optimizing Wasm Binaries & Copying JavaScript Wrappers ---");
+  console.log("\n--- Optimizing Wasm Binaries & Copying JavaScript Wrappers ---");
 
   fs.mkdirSync(config.distDir, { recursive: true });
 

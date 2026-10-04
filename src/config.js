@@ -1,41 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cleanFlags } from "./utils/exec.js";
+import { DEFAULT_EMSDK_VERSION } from "./steps/ensure-emsdk.js";
 import {
   ensureOutDir,
   resolvePreferredLlvmDir,
   resolvePreferredEmsdkDir,
   resolvePreferredHostLlvmDir,
 } from "./utils/fs.js";
-
-export const EMSCRIPTEN_PRUNE_DIRS = Object.freeze([
-  "AL",
-  "EGL",
-  "GL",
-  "GLES",
-  "GLES2",
-  "GLES3",
-  "GLFW",
-  "KHR",
-  "SDL",
-  "X11",
-  "fakesdl",
-  "sanitizer",
-  "scsi",
-  "webgl",
-]);
-
-export const CLANG_HEADER_PRUNE_PATTERN =
-  /(intrin|arm|riscv|altivec|cpuid|cuda|hip|spirv|hexagon|opencl)/iv;
-
-export const LIB_PRUNE_PATTERN = new RegExp(
-  `^(${[
-    "lib(GL.*|al|html5|fetch.*|stb_image|sockets.*|jsmath|openmp|wasm_workers.*|embind.*|emmalloc.*|mimalloc.*|llvmlibc.*|wasmfs.*|standalonewasm-.*)\\.a",
-    ".*-(mt|ww|debug|tracing|asan|ubsan.*|lsan.*|legacyexcept|legacysjlj|wasmsjlj|wasmexcept).*\\.a",
-    "libclang_rt\\.(asan.*|ubsan.*|lsan.*|sanitizer_common.*)\\.a",
-  ].join("|")})$`,
-  "v"
-);
 
 export const CXX_FLAGS = cleanFlags(`
   -Oz
@@ -165,10 +137,7 @@ export function resolveBuildConfig(options = {}) {
   const buildWasmDir = path.join(llvmDir, "build-wasm");
   const nativeBinDir = path.join(buildNativeDir, "bin");
   const wasmBinDir = path.join(buildWasmDir, "bin");
-  const emscriptenSysroot = path.join(
-    emsdkDir,
-    "upstream/emscripten/cache/sysroot"
-  );
+  const buildSysrootDir = path.join(rootDir, "out", "build-sysroot");
 
   const hostLlvmDir = path.resolve(
     options.hostLlvmDir ||
@@ -219,7 +188,8 @@ export function resolveBuildConfig(options = {}) {
     distDir,
     stageDir,
     emsdkDir,
-    emscriptenSysroot,
+    buildSysrootDir,
+    hostBinDir,
     buildNativeDir,
     buildWasmDir,
     nativeBinDir,
@@ -229,7 +199,7 @@ export function resolveBuildConfig(options = {}) {
     llvmStripPath,
     dryRun,
     llvmTag,
-    emsdkVersion: options.emsdkVersion || process.env.EMSDK_VERSION || "6.0.9",
+    emsdkVersion: options.emsdkVersion || process.env.EMSDK_VERSION || DEFAULT_EMSDK_VERSION,
     hostLlvmDir,
     hostClangPath,
     hostClangXXPath,
@@ -238,8 +208,5 @@ export function resolveBuildConfig(options = {}) {
     cxxFlags: CXX_FLAGS,
     exeLinkerFlags: EXE_LINKER_FLAGS,
     wasmOptFlags: WASM_OPT_FLAGS,
-    emscriptenPruneDirs: EMSCRIPTEN_PRUNE_DIRS,
-    clangHeaderPrunePattern: CLANG_HEADER_PRUNE_PATTERN,
-    libPrunePattern: LIB_PRUNE_PATTERN,
   };
 }

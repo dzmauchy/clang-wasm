@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bare WebAssembly program</title>
+<h1>Bare WebAssembly program</h1>
+<button id="run" type="button">Run program</button>
+<pre id="output" aria-live="polite"></pre>
+<script type="module">
+  const output = document.querySelector("#output");
+  const button = document.querySelector("#run");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    output.textContent = "";
+    const bytes = [];
+    try {
+      const response = await fetch("program.wasm");
+      if (!response.ok) throw new Error(`Unable to load program (${response.status})`);
+      const { instance } = await WebAssembly.instantiate(await response.arrayBuffer(), {
+        env: {
+          js_print_char: value => bytes.push(value & 255),
+          js_now: () => performance.now(),
+          js_time: () => Date.now(),
+        },
+      });
+      const status = instance.exports.browser_run();
+      output.textContent = new TextDecoder().decode(new Uint8Array(bytes));
+      output.textContent += `\nProgram returned ${status}.`;
+    } catch (error) {
+      output.textContent = new TextDecoder().decode(new Uint8Array(bytes));
+      output.textContent += `\n${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+</html>

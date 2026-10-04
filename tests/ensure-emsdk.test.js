@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { ensureEmsdk, DEFAULT_EMSDK_VERSION } from "../src/steps/ensure-emsdk.js";
 
-test("DEFAULT_EMSDK_VERSION is 6.0.9", () => {
-  assert.equal(DEFAULT_EMSDK_VERSION, "6.0.9");
+test("DEFAULT_EMSDK_VERSION is 6.0.10", () => {
+  assert.equal(DEFAULT_EMSDK_VERSION, "6.0.10");
 });
 
 test("ensureEmsdk uses existing EMSDK environment variable", () => {
