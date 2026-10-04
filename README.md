@@ -11,25 +11,29 @@ The build host needs Node.js 24+, Git, CMake 3.24+, Ninja, Python 3 with PyYAML,
 Clang/LLVM tools with the WebAssembly backend. The pipeline downloads host
 LLVM, LLVM sources, and Emscripten when needed. CMake builds LLVM libc,
 libc++, libc++abi, and compiler-rt builtins from the same selected LLVM source
-release and packages the complete sysroot. JavaScript only invokes CMake.
+release. JavaScript coordinates those dependency builds, compiles the browser
+runtime, and packages the complete sysroot.
 
 ## Build only the sysroot
 
 ```sh
-cmake -S . -B out/build-sysroot -G Ninja -DSYSROOT_JOBS=4
-cmake --build out/build-sysroot --target sysroot --parallel 4
-ctest --test-dir out/build-sysroot --output-on-failure
+npm run build-sysroot -- --llvm-version 23.1.2 --jobs 4 --test
+# Test an existing sysroot without rebuilding:
+npm run test-sysroot
 ```
 
-`SYSROOT_OUTPUT_DIR` defaults to `dist`. Both `sysroot/` and `sysroot.tgz`
+`--dist-dir` defaults to `dist`. Both `sysroot/` and `sysroot.tgz`
 remain there after building. The archive extracts to a top-level `sysroot/`
 directory, suitable for mounting at `/sysroot` in the compiler's filesystem.
 
-Set `SYSROOT_CLANG`, `SYSROOT_CLANGXX`, `SYSROOT_AR`, `SYSROOT_RANLIB`, and
-`SYSROOT_STRIP` to select host tools. `CLANG_RESOURCE_DIR` defaults to the
-chosen Clang's resource directory; it should match the version of Clang that
-will consume the sysroot. `LLVM_SOURCE_DIR` defaults to `out/llvm-project`;
-when missing, CMake downloads the release selected by `LLVM_VERSION`.
+Use `--host-llvm-dir` (or `HOST_LLVM_DIR`) to select host LLVM tools.
+`--resource-dir` (or `CLANG_RESOURCE_DIR`) defaults to the chosen Clang's
+resource directory; it should match the version of Clang that will consume
+the sysroot. `--llvm-dir` (or `LLVM_DIR`) defaults to `out/llvm-project`;
+when missing, JavaScript downloads the release selected by `--llvm-version`
+or `LLVM_VERSION` (default 23.1.2 for the standalone sysroot command).
+Dependency build files remain in `out/build-sysroot`. CMake is required for
+LLVM's internal builds; this repository has no root `CMakeLists.txt`.
 The source tree receives idempotent adaptations for LLVM libc's Wasm
 configuration and libc++abi's no-RTTI source selection during the build.
 
@@ -56,7 +60,7 @@ wide characters, `std::random_device`, time-zone databases, and
 `std::chrono::steady_clock` are disabled. Use `printf` or the browser helpers
 for output and `browser::now()` for monotonic timestamps.
 
-`SYSROOT_HEAP_SIZE` sets the bounded LLVM allocator region in bytes (default
+`--heap-size` (or `SYSROOT_HEAP_SIZE`) sets the bounded LLVM allocator region in bytes (default
 4194304, or 4 MiB). On the first allocation, the runtime grows linear memory
 as needed to reserve this region. Exhaustion returns null; freeing blocks
 makes them reusable. Set a smaller heap for applications with lower memory
@@ -119,7 +123,7 @@ Ordinary `new` and C++ operations that would throw terminate by trapping;
 
 ## Validation
 
-`npm test` checks the build pipeline. The CTest smoke test compiles a C++20
+`npm test` checks the build pipeline. `npm run test-sysroot` compiles a C++20
 program and instantiates it using Node's WebAssembly engine, exercising
 containers, strings, formatting, smart pointers, aligned allocation, PMR,
 ABI guards, UTC clocks, stdio, floating-point math, compiler builtins, static
@@ -131,4 +135,4 @@ against the extracted archive and check the explicit browser imports.
 The Wasm adaptation uses LLVM libc's [full-build configuration](https://libc.llvm.org/build_concepts.html)
 and its [bare-metal I/O hooks](https://github.com/llvm/llvm-project/blob/main/libc/src/__support/OSUtil/baremetal/io.h).
 The C++ runtime follows LLVM's [vendor configuration](https://libcxx.llvm.org/VendorDocumentation.html)
-with the bare-metal options selected in `CMakeLists.txt`.
+with the bare-metal options selected in `src/steps/build-sysroot.js`.

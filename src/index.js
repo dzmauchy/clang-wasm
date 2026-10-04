@@ -25,6 +25,8 @@ export async function main(args = process.argv.slice(2)) {
       "emsdk-dir": { type: "string" },
       "emsdk-version": { type: "string" },
       jobs: { type: "string", short: "j" },
+      "heap-size": { type: "string" },
+      "resource-dir": { type: "string" },
       "dry-run": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -48,6 +50,8 @@ Options:
   --emsdk-dir <path>        Path to Emscripten SDK directory (defaults to ./out/emsdk)
   --emsdk-version <ver>     Emscripten version to install if EMSDK not set (defaults to ${DEFAULT_EMSDK_VERSION})
   -j, --jobs <n>            Number of parallel ninja build jobs (defaults to 4)
+  --heap-size <bytes>       Browser sysroot heap size (defaults to 4194304)
+  --resource-dir <path>     Clang resource directory to package
   --dry-run                 Simulate the build pipeline without running compilation commands
   -h, --help                Show this help message
 `);
@@ -105,6 +109,8 @@ Options:
     hostClangXXPath: hostLlvm.clangXXPath,
     hostLldPath: hostLlvm.lldPath,
     ninjaJobs,
+    sysrootHeapSize: values["heap-size"],
+    clangResourceDir: values["resource-dir"],
     dryRun: isDryRun,
     llvmTag,
     emsdkVersion: values["emsdk-version"],

@@ -37,7 +37,9 @@ jobs:
         run: npm run build
 
       - name: Verify sysroot runtime
-        run: ctest --test-dir out/build-sysroot --output-on-failure
+        env:
+          LLVM_VERSION: ${{ inputs.llvm_version }}
+        run: npm run test-sysroot
 
       - name: Publish GitHub Release
         env:
