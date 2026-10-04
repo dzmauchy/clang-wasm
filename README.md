@@ -27,9 +27,9 @@ remain there after building. The archive extracts to a top-level `sysroot/`
 directory, suitable for mounting at `/sysroot` in the compiler's filesystem.
 
 Use `--host-llvm-dir` (or `HOST_LLVM_DIR`) to select host LLVM tools.
-`--resource-dir` (or `CLANG_RESOURCE_DIR`) defaults to the chosen Clang's
-resource directory; it should match the version of Clang that will consume
-the sysroot. `--llvm-dir` (or `LLVM_DIR`) defaults to `out/llvm-project`;
+Clang resource headers come from the selected LLVM source release through
+`install-core-resource-headers` and `install-webassembly-resource-headers`.
+`--llvm-dir` (or `LLVM_DIR`) defaults to `out/llvm-project`;
 when missing, JavaScript downloads the release selected by `--llvm-version`
 or `LLVM_VERSION` (default 23.1.2 for the standalone sysroot command).
 Dependency build files remain in `out/build-sysroot`. CMake is required for
@@ -39,10 +39,23 @@ configuration and libc++abi's no-RTTI source selection during the build.
 
 The sysroot includes C headers, C++ headers in `include/c++/v1` (including
 the generated `__config_site` and ABI headers), `browser.hpp`, `libc.a`,
-`libm.a`, `libc++.a`, `libc++abi.a`, `libbrowser.a`, compiler-rt builtins,
-Clang resource headers, and the LLVM license. LLVM libc's public headers
+`libm.a`, `libc++.a`, `libc++abi.a`, `libc++experimental.a`, `libbrowser.a`,
+compiler-rt builtins, core and WebAssembly Clang resource headers, and the
+LLVM license. LLVM libc's public headers
 include the matching `llvm-libc-types` and `llvm-libc-macros` directories.
-Packaging recreates the staging directory, removing old headers and libraries.
+Each build starts with an empty sysroot and installs the selected LLVM components
+straight into it. Packaging adds the browser runtime and license metadata, then
+archives the whole directory without filename lists or copy filters.
+LLVM's install layout is preserved: libc and libm live in
+`lib/wasm32-unknown-unknown`, C++ libraries in `lib`, and compiler-rt builtins
+in `lib/clang/<major>/lib/wasi`. The `cxx` component also installs its Wasm
+`libc++experimental.a`. Default MinSizeRel builds emit no debug information;
+packaging does not scan or strip the installed archives.
+CUDA, HIP, OpenCL, HLSL, and other architectures' resource headers are excluded
+using LLVM's install targets. The compiler-rt build installs only
+`install-clang_rt.builtins-wasm32`; libc, libc++, and libc++abi are also built
+for `wasm32-unknown-unknown`. Header selection requires no LLVM source patches
+and runs before the Clang and LLD builds.
 
 This Wasm port selects LLVM libc's portable bare-metal implementations,
 single-threaded stdio, external `errno` storage, and no TLS. Floating-point
@@ -76,17 +89,22 @@ clang++ --target=wasm32-unknown-unknown -std=c++20 -O2 \
   -fno-exceptions -fno-rtti -stdlib=libc++ -nostdlib \
   --sysroot=dist/sysroot \
   examples/browser.cpp -Ldist/sysroot/lib \
+  -Ldist/sysroot/lib/wasm32-unknown-unknown \
+  -Ldist/sysroot/lib/clang/23/lib/wasi \
   -lbrowser -lc++ -lc++abi -lc -lm -lclang_rt.builtins-wasm32 \
   -Wl,--no-entry -Wl,--export=browser_run -Wl,--export-memory \
   -o examples/program.wasm
 ```
 
+Replace `23` in the resource-library path with the selected LLVM major version.
 The same compile flags work in browser-hosted Clang. Compile to an object
 with `-c`, then pass the object to browser-hosted LLD with:
 
 ```text
 --no-entry --export=browser_run --export-memory program.o
--L/sysroot/lib -lbrowser -lc++ -lc++abi -lc -lm -lclang_rt.builtins-wasm32 -o program.wasm
+-L/sysroot/lib -L/sysroot/lib/wasm32-unknown-unknown
+-L/sysroot/lib/clang/23/lib/wasi
+-lbrowser -lc++ -lc++abi -lc -lm -lclang_rt.builtins-wasm32 -o program.wasm
 ```
 
 Serve `examples/` over HTTP and open `browser.html`. The page provides

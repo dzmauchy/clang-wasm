@@ -14,7 +14,6 @@ try {
       "host-llvm-dir": { type: "string" },
       "dist-dir": { type: "string" },
       "heap-size": { type: "string" },
-      "resource-dir": { type: "string" },
       jobs: { type: "string", short: "j" },
       "dry-run": { type: "boolean" },
       test: { type: "boolean" },
@@ -32,7 +31,6 @@ try {
   --dist-dir <path>        Output directory (defaults to dist)
   -j, --jobs <n>          Parallel build jobs (defaults to NINJA_JOBS or 4)
   --heap-size <bytes>      Browser heap (defaults to SYSROOT_HEAP_SIZE or 4194304)
-  --resource-dir <path>    Resource headers (defaults to CLANG_RESOURCE_DIR or host Clang's)
   --test                  Run the sysroot smoke test after building
   --test-only             Test the existing sysroot without rebuilding
   --dry-run               Simulate building without compiling
@@ -56,7 +54,6 @@ try {
       distDir: values["dist-dir"],
       ninjaJobs: values.jobs ? Number(values.jobs) : undefined,
       sysrootHeapSize: values["heap-size"],
-      clangResourceDir: values["resource-dir"],
     });
     if (!values["test-only"]) buildSysroot(config);
     if (values.test || values["test-only"]) testSysroot(config);

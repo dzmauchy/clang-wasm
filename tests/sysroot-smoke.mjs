@@ -9,14 +9,23 @@ const archive = path.join(path.dirname(stagedSysroot), "sysroot.tgz");
 const entries = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" }).trim().split("\n");
 for (const entry of ["include/browser.hpp", "include/browser_config.h",
   "include/c++/v1/vector", "include/c++/v1/__config_site", "include/c++/v1/cxxabi.h",
-  "include/stdio.h", "lib/libc.a", "lib/libm.a", "lib/libc++.a", "lib/libc++abi.a", "lib/libbrowser.a", "lib/libclang_rt.builtins-wasm32.a",
+  "include/stdio.h", "lib/wasm32-unknown-unknown/libc.a", "lib/wasm32-unknown-unknown/libm.a",
+  "lib/libc++.a", "lib/libc++abi.a", "lib/libbrowser.a",
+  `lib/clang/${resourceVersion}/lib/wasi/libclang_rt.builtins-wasm32.a`,
   `lib/clang/${resourceVersion}/include/stddef.h`,
+  `lib/clang/${resourceVersion}/include/wasm_simd128.h`,
   "share/licenses/LLVM-LICENSE.TXT"]) {
   assert.ok(entries.includes(`sysroot/${entry}`), `Archive must include ${entry}`);
 }
 assert.ok(entries.every(entry => entry.startsWith("sysroot/")));
 assert.ok(entries.every(entry => !entry.includes("wasm32-emscripten") && !entry.includes("/etl/") && !entry.includes("etl_profile.h") && !entry.includes("ETL-LICENSE")));
 assert.ok(entries.every(entry => !entry.toLowerCase().includes("picolibc")));
+const resourcePrefix = `sysroot/lib/clang/${resourceVersion}/include/`;
+for (const header of ["cuda_wrappers/", "__clang_cuda_math.h", "__clang_hip_math.h", "opencl-c.h",
+  "hlsl.h", "hlsl/", "openmp_wrappers/", "immintrin.h", "arm_neon.h", "riscv_vector.h"]) {
+  assert.ok(!entries.some(entry => entry.startsWith(`${resourcePrefix}${header}`)),
+    `Archive must exclude non-Wasm resource header ${header}`);
+}
 assert.ok(entries.includes("sysroot/include/llvm-libc-types/FILE.h"), "Archive must use LLVM libc headers");
 const extracted = path.join(outputDir, "extracted");
 fs.rmSync(extracted, { recursive: true, force: true });
@@ -36,7 +45,8 @@ const flags = [
   `--sysroot=${sysroot}`, `-resource-dir=${sysroot}/lib/clang/${resourceVersion}`,
 ];
 const linkFlags = [
-  `-L${sysroot}/lib`, "-lbrowser", "-lc++", "-lc++abi", "-lc", "-lm", "-lclang_rt.builtins-wasm32",
+  `-L${sysroot}/lib`, `-L${sysroot}/lib/wasm32-unknown-unknown`,
+  `-L${sysroot}/lib/clang/${resourceVersion}/lib/wasi`, "-lbrowser", "-lc++", "-lc++abi", "-lc", "-lm", "-lclang_rt.builtins-wasm32",
   "-Wl,--no-entry", "-Wl,--export=browser_run", "-Wl,--export-memory",
   `-Wl,--max-memory=${maximumMemory}`,
 ];
