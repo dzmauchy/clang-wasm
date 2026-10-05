@@ -86,15 +86,24 @@ export function packageSysroot(config) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(source, target, { recursive: true });
   };
-  copy(path.join(config.rootDir, "sysroot", "browser.hpp"), "include/browser.hpp");
-  copy(path.join(config.buildSysrootDir, "browser_config.h"), "include/browser_config.h");
+  if (config.sysrootRuntime === "wamr") {
+    copy(path.join(config.rootDir, "sysroot", "wamr.h"), "include/wamr.h");
+    copy(path.join(config.rootDir, "sysroot", "wamr.hpp"), "include/wamr.hpp");
+    for (const file of ["wamr-host.c", "wamr-host.h", "README.md"]) {
+      copy(path.join(config.rootDir, "sysroot", "wamr", file), `share/wamr/${file}`);
+    }
+  } else {
+    copy(path.join(config.rootDir, "sysroot", "browser.hpp"), "include/browser.hpp");
+    copy(path.join(config.buildSysrootDir, "browser_config.h"), "include/browser_config.h");
+  }
   copy(path.join(config.llvmDir, "llvm", "LICENSE.TXT"), "share/licenses/LLVM-LICENSE.TXT");
   // Use CMake's bundled archiver so packaging adds no build-host dependency.
-  command(config, ["cmake", "-E", "tar", "czf", path.join(config.distDir, "sysroot.tgz"),
-    "--format=gnutar", "sysroot"], config.distDir);
+  command(config, ["cmake", "-E", "tar", "czf", path.join(config.distDir, config.sysrootArchive ?? "sysroot.tgz"),
+    "--format=gnutar", path.basename(stageDir)], config.distDir);
 }
 
 export function buildSysroot(config) {
+  const wamr = config.sysrootRuntime === "wamr";
   console.log("\n--- Building and Archiving LLVM libc + libc++ + libc++abi Sysroot ---");
   const heapSize = String(config.sysrootHeapSize ?? 4194304);
   if (!/^\d+$/.test(heapSize) || Number(heapSize) < 65536 || Number(heapSize) > 1073741824) {
@@ -137,9 +146,13 @@ export function buildSysroot(config) {
   for (const script of ["prepare-llvm-libc.cmake", "prepare-libcxx.cmake"]) {
     command(config, ["cmake", `-DLLVM_SOURCE_DIR=${config.llvmDir}`, "-P", path.join(config.rootDir, "cmake", script)]);
   }
+  if (wamr) {
+    command(config, ["cmake", `-DLLVM_SOURCE_DIR=${config.llvmDir}`, "-P",
+      path.join(config.rootDir, "cmake", "prepare-wamr-allocator.cmake")]);
+  }
   command(config, ["cmake", "-G", "Ninja", "-S", path.join(config.llvmDir, "runtimes"), "-B", runtimesBuildDir,
     `-DCMAKE_TOOLCHAIN_FILE=${toolchainFile}`, `-DCMAKE_INSTALL_PREFIX=${installDir}`,
-    `-DCMAKE_CXX_FLAGS=-DBROWSER_HEAP_SIZE=${heapSize} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti`,
+    `-DCMAKE_CXX_FLAGS=-DBROWSER_HEAP_SIZE=${heapSize}${wamr ? " -DWAMR_SYSROOT=1" : ""} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti`,
     ...RUNTIME_OPTIONS]);
   command(config, ["cmake", "--build", runtimesBuildDir, "--target", "libc", "libm", "cxx", "cxxabi",
     "--parallel", config.ninjaJobs]);
@@ -158,15 +171,24 @@ export function buildSysroot(config) {
     "-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF", "-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON"]);
   command(config, ["cmake", "--build", builtinsBuildDir, "--target", "install-clang_rt.builtins-wasm32",
     "--parallel", config.ninjaJobs]);
+  const runtimeFlags = wamr ? ["-DWAMR_SYSROOT=1"] : [];
+  const runtimeObjects = [path.join(config.buildSysrootDir, "browser.o")];
   command(config, [config.hostClangPath, "--target=wasm32-unknown-unknown", "-std=c11", "-Oz",
-    `--sysroot=${installDir}`, `-I${config.buildSysrootDir}`, "-ffunction-sections", "-fdata-sections",
+    `--sysroot=${installDir}`, `-I${config.buildSysrootDir}`, ...runtimeFlags, "-ffunction-sections", "-fdata-sections",
     "-c", path.join(config.rootDir, "sysroot", "browser.c"), "-o", path.join(config.buildSysrootDir, "browser.o")]);
-  command(config, [tools.SYSROOT_AR, "rcs", path.join(installDir, "lib", "libbrowser.a"),
-    path.join(config.buildSysrootDir, "browser.o")]);
+  if (wamr) {
+    const object = path.join(config.buildSysrootDir, "wamr-allocator.o");
+    command(config, [config.hostClangPath, "--target=wasm32-unknown-unknown", "-std=c11", "-Oz",
+      `--sysroot=${installDir}`, "-ffunction-sections", "-fdata-sections", "-c",
+      path.join(config.rootDir, "sysroot", "wamr-allocator.c"), "-o", object]);
+    runtimeObjects.push(object);
+  }
+  command(config, [tools.SYSROOT_AR, "rcs", path.join(installDir, "lib", wamr ? "libwamr.a" : "libbrowser.a"),
+    ...runtimeObjects]);
 
   if (config.dryRun) {
     fs.mkdirSync(config.distDir, { recursive: true });
-    fs.writeFileSync(path.join(config.distDir, "sysroot.tgz"), "mock-sysroot-tar-gz\n");
+    fs.writeFileSync(path.join(config.distDir, config.sysrootArchive ?? "sysroot.tgz"), "mock-sysroot-tar-gz\n");
     return;
   }
   packageSysroot(config);

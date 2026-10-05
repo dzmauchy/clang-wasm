@@ -4,6 +4,12 @@
 #include <stdbool.h>
 #include <time.h>
 #include <llvm-libc-types/ssize_t.h>
+#if defined(WAMR_SYSROOT)
+#include "wamr.h"
+#define js_print_char wamr_print_char
+#define js_time wamr_time
+#define browser_run wamr_run
+#else
 #include "browser_config.h"
 
 __attribute__((import_module("env"), import_name("js_print_char")))
@@ -11,6 +17,7 @@ void js_print_char(int character);
 
 __attribute__((import_module("env"), import_name("js_time")))
 double js_time(void);
+#endif
 
 // LLVM libc's timespec_get hook also backs libc++'s system_clock. The host
 // supplies Unix-epoch milliseconds (Date.now), separately from performance.now.
@@ -57,6 +64,7 @@ int* __llvm_libc_errno(void) {
 
 // LLVM's bare-metal allocator manages a bounded region. Reserve that region
 // once on its first allocation, growing Wasm memory before touching its bytes.
+#if !defined(WAMR_SYSROOT)
 int __llvm_libc_heap_init(void) {
     extern unsigned char __heap_base;
     const uint64_t needed = (uint64_t)(uintptr_t)&__heap_base + BROWSER_HEAP_SIZE;
@@ -75,6 +83,7 @@ int __llvm_libc_heap_init(void) {
     }
     return 1;
 }
+#endif
 
 __attribute__((noreturn)) void __llvm_libc_exit(int status) {
     (void)status;

@@ -22,6 +22,9 @@ function fixture(rootDir) {
   for (const template of ["cmake/wasm32-toolchain.cmake.in", "sysroot/browser_config.h.in"]) {
     write(path.join(rootDir, template), fs.readFileSync(path.join(projectRoot, template), "utf8"));
   }
+  for (const file of ["wamr.h", "wamr.hpp", "wamr-allocator.c", "wamr/wamr-host.c", "wamr/wamr-host.h", "wamr/README.md"]) {
+    write(path.join(rootDir, "sysroot", file), fs.readFileSync(path.join(projectRoot, "sysroot", file), "utf8"));
+  }
   return config;
 }
 
@@ -118,6 +121,41 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
 test("sysroot rejects invalid heap sizes before running commands", () => {
   for (const sysrootHeapSize of [0, 65535, 1073741825, "NaN", "65536.5", "123abc"]) {
     assert.throws(() => buildSysroot({ sysrootHeapSize }), /SYSROOT_HEAP_SIZE must be between/);
+  }
+});
+
+test("WAMR builds into a separate sysroot with host allocation and its embedding adapter", () => {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "wamr-sysroot-"));
+  const previousPath = process.env.PATH;
+  try {
+    const config = fixture(rootDir);
+    config.sysrootRuntime = "wamr";
+    config.sysrootArchive = "wamrsr.tgz";
+    config.stageDir = path.join(config.distDir, "wamrsr");
+    config.buildSysrootDir = path.join(rootDir, "out", "build-wamr-sysroot");
+    fs.mkdirSync(path.join(config.distDir, "sysroot"), { recursive: true });
+    const sentinel = path.join(config.distDir, "sysroot", "existing.h");
+    fs.writeFileSync(sentinel, "browser sysroot");
+    const log = path.join(rootDir, "commands.jsonl");
+    process.env.PATH = `${mockTools(config, log)}:${previousPath}`;
+    buildSysroot(config);
+    const commands = readCommands(log);
+    assert.ok(commands.some(args => args.includes(path.join(rootDir, "cmake", "prepare-wamr-allocator.cmake"))));
+    assert.ok(commands.some(args => args.some(arg => arg.startsWith("-DCMAKE_CXX_FLAGS=") && arg.includes("-DWAMR_SYSROOT=1"))));
+    assert.ok(commands.some(args => args.includes(path.join(rootDir, "sysroot", "wamr-allocator.c"))));
+    assert.deepEqual(commands.at(-1), ["cmake", "-E", "tar", "czf", path.join(config.distDir, "wamrsr.tgz"),
+      "--format=gnutar", "wamrsr"]);
+    assert.equal(fs.readFileSync(sentinel, "utf8"), "browser sysroot");
+    for (const file of ["include/wamr.h", "include/wamr.hpp", "lib/libwamr.a", "share/wamr/wamr-host.c",
+      "share/wamr/wamr-host.h", "share/wamr/README.md"]) {
+      assert.ok(fs.existsSync(path.join(config.stageDir, file)), `Missing ${file}`);
+    }
+    for (const file of ["lib/libbrowser.a", "include/browser.hpp", "include/browser_config.h"]) {
+      assert.equal(fs.existsSync(path.join(config.stageDir, file)), false);
+    }
+  } finally {
+    process.env.PATH = previousPath;
+    fs.rmSync(rootDir, { recursive: true, force: true });
   }
 });
 

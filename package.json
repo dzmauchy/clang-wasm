@@ -11,6 +11,8 @@
     "build": "node src/index.js",
     "build-sysroot": "node scripts/build-sysroot.js",
     "test-sysroot": "node scripts/build-sysroot.js --test-only",
+    "build-wamr-sysroot": "node scripts/build-wamr-sysroot.js",
+    "test-wamr-sysroot": "node scripts/build-wamr-sysroot.js --test-only",
     "test-lld": "node tests/wasm-lld-smoke.mjs",
     "test": "node --test tests/**/*.test.js",
     "clean-llvm-project": "node scripts/clean-llvm-project.js",

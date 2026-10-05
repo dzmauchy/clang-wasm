@@ -24,6 +24,27 @@ runtime, and packages the complete sysroot.
 
 ## Build only the sysroot
 
+For WAMR's host-managed app heap, use the separate build:
+
+```sh
+npm run build-wamr-sysroot -- --jobs 4
+# Validate C++23 and PMR under a native WAMR interpreter:
+npm run build-wamr-sysroot -- --test --wamr-dir /path/to/wasm-micro-runtime
+```
+
+This produces `dist/wamrsr.tgz` (extracts to `wamrsr/`) and keeps the installed
+sysroot at `dist/wamrsr/`. It includes the WAMR host adapter and embedding
+instructions in `share/wamr/`; the source instructions are in
+[sysroot/wamr/README.md](sysroot/wamr/README.md). Link `-lwamr`, register the host
+adapter, and instantiate with a nonzero app heap. C/C++ allocations, including
+alignment and default PMR resources, use that heap. Heap capacity is a host
+setting. Browser and WAMR sysroots use separate build and output directories.
+The GitHub Actions release workflow builds both sysroots, validates the WAMR
+archive with a pinned native WAMR interpreter, and publishes `wamrsr.tgz`
+alongside `sysroot.tgz` and the compiler/linker binaries.
+
+For the browser sysroot:
+
 ```sh
 npm run build-sysroot -- --llvm-version 23.1.2 --jobs 4 --test
 # Test an existing sysroot without rebuilding:
