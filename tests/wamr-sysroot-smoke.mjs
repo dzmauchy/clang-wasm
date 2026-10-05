@@ -44,4 +44,25 @@ execFileSync("cmake", ["-G", "Ninja", "-S", path.join(projectRoot, "tests", "wam
   "-B", nativeBuild, `-DWAMR_ROOT_DIR=${wamrDir}`,
   `-DWAMR_ADAPTER_DIR=${sysroot}/share/wamr`, "-DCMAKE_BUILD_TYPE=Release"], { stdio: "inherit", env });
 execFileSync("cmake", ["--build", nativeBuild, "--parallel", jobs], { stdio: "inherit", env });
-execFileSync(path.join(nativeBuild, "wamr-sysroot-smoke"), [wasm], { stdio: "inherit" });
+// Require the extended call_indirect table-index encoding explicitly. Host
+// Clang/LLD builds may otherwise emit a single-byte zero and hide this missing
+// WAMR feature until a different toolchain/runner produces a padded index.
+const section = (id, bytes) => [id, bytes.length, ...bytes];
+const probe = new Uint8Array([
+  0, 97, 115, 109, 1, 0, 0, 0,
+  ...section(1, [1, 0x60, 0, 1, 0x7f]), // type: () -> i32
+  ...section(3, [2, 0, 0]),             // two functions of that type
+  ...section(4, [1, 0x70, 0, 1]),       // one funcref table with one slot
+  ...section(5, [1, 0, 1]),             // one memory, one initial page
+  ...section(7, [1, 8, ...Buffer.from("wamr_run"), 0, 0]),
+  ...section(9, [1, 0, 0x41, 0, 0x0b, 1, 1]), // table[0] = function 1
+  ...section(10, [2,
+    8, 0, 0x41, 0, 0x11, 0, 0x80, 0, 0x0b, // call_indirect type 0, padded table 0
+    4, 0, 0x41, 0, 0x0b]),                  // function 1 returns zero
+]);
+await WebAssembly.compile(probe); // Verify that the fixture is valid Wasm.
+const probeFile = path.join(outputDir, "call-indirect-probe.wasm");
+fs.writeFileSync(probeFile, probe);
+const harness = path.join(nativeBuild, "wamr-sysroot-smoke");
+execFileSync(harness, [probeFile, "--feature-probe"], { stdio: "inherit" });
+execFileSync(harness, [wasm], { stdio: "inherit" });

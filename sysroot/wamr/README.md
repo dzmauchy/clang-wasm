@@ -41,7 +41,9 @@ wasm_module_inst_t instance = wasm_runtime_instantiate(
 ```
 
 Custom native imports suffice; WAMR's libc-builtin and libc-wasi libraries are
-optional. This adapter uses `wasm_runtime_module_malloc/free`, never the native
+optional. Build WAMR with `-DWAMR_BUILD_REF_TYPES=1`: Clang's default Wasm output
+can use the extended `call_indirect` encoding that requires this support.
+This adapter uses `wasm_runtime_module_malloc/free`, never the native
 runtime heap. **Do not export `malloc` or `free`, including via `--export-all`.**
 WAMR detects those exports as a guest allocator, which defeats this app-heap
 configuration and can recurse into the allocation callbacks.

@@ -8,6 +8,9 @@ set(WAMR_BUILD_JIT 0)
 set(WAMR_BUILD_LIBC_BUILTIN 0)
 set(WAMR_BUILD_LIBC_WASI 0)
 set(WAMR_BUILD_LIB_PTHREAD 0)
+# Clang's wasm32 output uses reference types, including the extended
+# call_indirect encoding. Enable it explicitly instead of relying on defaults.
+set(WAMR_BUILD_REF_TYPES 1)
 include("${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake")
 add_library(vmlib STATIC ${WAMR_RUNTIME_LIB_SOURCE})
 add_executable(wamr-sysroot-smoke main.c "${WAMR_ADAPTER_DIR}/wamr-host.c")
