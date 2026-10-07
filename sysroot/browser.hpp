@@ -6,9 +6,7 @@
 #endif
 
 #include <wasm.hpp>
-#include <browser_config.h>
 
-// Implement these named imports in the WebAssembly.Instance import object.
 extern "C" {
 __attribute__((import_module("env"), import_name("js_print_char")))
 void js_print_char(int character);
@@ -16,7 +14,6 @@ void js_print_char(int character);
 __attribute__((import_module("env"), import_name("js_now")))
 double js_now(void);
 
-// Unix-epoch milliseconds supplied by the host.
 __attribute__((import_module("env"), import_name("js_time")))
 double js_time(void);
 
@@ -34,7 +31,6 @@ inline void write(const void* data, size_t size) {
     for (size_t i = 0; i < size; ++i) js_print_char(bytes[i]);
 }
 
-// Milliseconds, supplied by the host (usually performance.now()).
 inline double now() { return js_now(); }
 }
 

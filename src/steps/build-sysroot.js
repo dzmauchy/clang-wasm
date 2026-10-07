@@ -38,12 +38,9 @@ export function packageSysroot(config) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(source, target, { recursive: true });
   };
-  for (const header of ["wasm.h", "wasm.hpp"]) {
-    copy(path.join(config.rootDir, "sysroot", header), `include/${header}`);
-  }
-  copy(path.join(config.buildSysrootDir, "browser_config.h"), "include/browser_config.h");
-  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.h"), "include/tlsf.h");
-  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.h"), "share/licenses/TLSF-LICENSE.txt");
+  copy(path.join(config.rootDir, "sysroot", "wasm.hpp"), "include/wasm.hpp");
+  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.hpp"), "include/tlsf.hpp");
+  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.hpp"), "share/licenses/TLSF-LICENSE.txt");
   copy(path.join(config.rootDir, "sysroot", "browser.hpp"), "include/browser.hpp");
   copy(path.join(config.llvmDir, "llvm", "LICENSE.TXT"), "share/licenses/LLVM-LICENSE.TXT");
   // Use CMake's bundled archiver so packaging adds no build-host dependency.
@@ -53,10 +50,6 @@ export function packageSysroot(config) {
 
 export function buildSysroot(config) {
   console.log("\n--- Building and Archiving TLSF + compiler-rt Sysroot ---");
-  const heapSize = String(config.sysrootHeapSize ?? 4194304);
-  if (!/^\d+$/.test(heapSize) || Number(heapSize) < 65536 || Number(heapSize) > 1073741824) {
-    throw new Error("SYSROOT_HEAP_SIZE must be between 65536 and 1073741824 bytes");
-  }
   if (!Number.isInteger(config.ninjaJobs) || config.ninjaJobs < 1) {
     throw new Error("Sysroot build jobs must be a positive integer");
   }
@@ -76,9 +69,6 @@ export function buildSysroot(config) {
     const toolchain = template.replace(/@(\w+)@/g, (_, name) =>
       String(tools[name]).replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$"));
     writeIfChanged(toolchainFile, toolchain);
-    const header = fs.readFileSync(path.join(config.rootDir, "sysroot", "browser_config.h.in"), "utf8")
-      .replaceAll("@SYSROOT_HEAP_SIZE@", heapSize);
-    writeIfChanged(path.join(config.buildSysrootDir, "browser_config.h"), header);
     fs.rmSync(installDir, { recursive: true, force: true });
     fs.mkdirSync(path.join(installDir, "lib"), { recursive: true });
   }
@@ -102,18 +92,18 @@ export function buildSysroot(config) {
   command(config, ["cmake", "--build", builtinsBuildDir, "--target", "install-clang_rt.builtins-wasm32",
     "--parallel", config.ninjaJobs]);
   const flags = ["--target=wasm32-unknown-unknown", "-Oz", "-ffreestanding", "-fno-builtin",
-    `--sysroot=${installDir}`, `-I${config.rootDir}/sysroot`, `-I${config.buildSysrootDir}`,
+    "-std=c++23", "-nostdinc++", "-fno-exceptions", "-fno-rtti", "-fno-threadsafe-statics",
+    `--sysroot=${installDir}`, `-I${config.rootDir}/sysroot`,
     "-ffunction-sections", "-fdata-sections"];
-  const compile = (source, cxx = false) => {
+  const compile = (source) => {
     const object = path.join(config.buildSysrootDir, `${path.basename(source)}.o`);
-    command(config, [cxx ? config.hostClangXXPath : config.hostClangPath, ...flags,
-      ...(cxx ? ["-std=c++23", "-nostdinc++", "-fno-exceptions", "-fno-rtti", "-fno-threadsafe-statics"] : ["-std=c11"]),
+    command(config, [config.hostClangXXPath, ...flags,
       "-c", path.join(config.rootDir, "sysroot", source), "-o", object]);
     return object;
   };
-  const tlsfObject = compile("tlsf/tlsf.c");
-  const runtimeObjects = [compile("wasm.c"), compile("wasm.cpp", true), compile("wasm-init.c")];
-  const hostObject = compile("browser.c");
+  const tlsfObject = compile("tlsf/tlsf.cpp");
+  const runtimeObjects = [compile("wasm.cpp")];
+  const hostObject = compile("browser.cpp");
   for (const [library, objects] of [
     ["libtlsf.a", [tlsfObject]], ["libwasm.a", runtimeObjects],
     ["libbrowser.a", [hostObject]],

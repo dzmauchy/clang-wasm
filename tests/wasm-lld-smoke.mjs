@@ -63,8 +63,8 @@ if (!isMainThread) {
   }
 
   try {
-    const source = path.join(tempDir, "answer.c");
-    fs.writeFileSync(source, "int answer(void) { return 42; }\n");
+    const source = path.join(tempDir, "answer.cpp");
+    fs.writeFileSync(source, 'extern "C" int answer(void) { return 42; }\n');
     const objects = [];
     for (const [name, target, flags] of [
       ["wasm", "wasm32-unknown-unknown", []],
@@ -74,8 +74,8 @@ if (!isMainThread) {
       ["macho", "x86_64-apple-darwin", []],
     ]) {
       const object = path.join(tempDir, `${name}.o`);
-      execFileSync(path.join(hostBinDir, "clang"), [
-        `--target=${target}`, "-c", "-O2", ...flags, source, "-o", object,
+      execFileSync(path.join(hostBinDir, "clang++"), [
+        `--target=${target}`, "-std=c++23", "-c", "-O2", ...flags, source, "-o", object,
       ]);
       objects.push([name, fs.readFileSync(object)]);
     }

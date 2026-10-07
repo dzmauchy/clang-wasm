@@ -3,7 +3,7 @@
 `npm run build -- --llvm-version 23.1.2` builds browser-hosted Clang and LLD
 and produces `dist/clang.{js,wasm}`, `dist/lld.{js,wasm}`, and `dist/sysroot.tgz`.
 Emscripten builds the tools. Compiled applications use TLSF, compiler-rt Wasm
-builtins, and the small runtime exposed by `wasm.hpp`. The sysroot does not
+builtins, and the small C++23 runtime exposed by `wasm.hpp`. The sysroot does not
 include libc, libc++, libc++abi, or their standard-library headers.
 
 The custom compiler in `cmake/wasm-clang` links Clang's driver, frontend, and
@@ -103,20 +103,26 @@ The libraries are:
 The builtins archive includes the objects from `libwasm.a` and `libtlsf.a`,
 so linking the default compiler-rt runtime supplies both arithmetic and
 allocation support. The split archives remain available for explicit links.
-`wasm.hpp` includes `wasm.h` and provides ordinary, array, sized, aligned,
+`wasm.hpp` is the runtime's single public header and requires C++23. It provides
+ordinary, array, sized, aligned,
 nothrow, and placement new/delete, plus `std::size_t`, `std::ptrdiff_t`,
 `std::nullptr_t`, `std::nothrow`, and `std::align_val_t`.
-`wasm.h` exposes `malloc`, `free`, `calloc`, `realloc`, `aligned_alloc`,
+It also exposes `malloc`, `free`, `calloc`, `realloc`, `aligned_alloc`,
 `memcpy`, `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strncmp`,
 `strcpy`, `putchar`, `puts`, `abort`, and `exit`. This is a small freestanding
-API; containers, formatting, math functions, and the full C/C++ libraries are
+API; containers, formatting, math functions, and the full C++ standard library are
 not supplied. Include `wasm.hpp` instead of `<new>` or libc headers.
 
-`--heap-size` or `SYSROOT_HEAP_SIZE` configures a bounded TLSF heap, defaulting
-to 4194304 bytes. The runtime reserves it on the first allocation using
-`memory.grow` after `__heap_base`. Host memory limits must allow this region
-plus the stack and static data. Freeing blocks allows reuse; the heap does not
-shrink. The allocator and runtime are single-threaded.
+The TLSF heap starts after `__heap_base` and uses available linear memory.
+When no existing block fits, the runtime calls `memory.grow` for enough
+64 KiB pages to add another TLSF pool, including alignment and allocator
+metadata. Memory limits come from the module's linker settings (such as
+`-Wl,--max-memory=<bytes>`) and the host. There is no fixed heap configuration.
+Freeing blocks allows reuse; linear memory does not shrink, and blocks from
+different pools do not coalesce. Individual allocation sizes are also subject
+to TLSF's block limit (approximately 1 GiB on wasm32). The allocator and runtime
+are single-threaded. The allocator owns the memory after `__heap_base`, including
+pages subsequently grown by the host.
 
 Allocation failure returns null and sets `*wasm_errno_location()` to
 `WASM_ENOMEM`; invalid `aligned_alloc` arguments set `WASM_EINVAL`.
@@ -170,8 +176,8 @@ extern "C" __attribute__((export_name("compute"))) int compute(int value) {
 }
 ```
 
-The runtime exports `void wasm_initialize()`, declared by `wasm.h` and available
-through `wasm.hpp`. It initializes C++ static constructors once per module
+The runtime exports `void wasm_initialize()`, declared by `wasm.hpp`.
+It initializes C++ static constructors once per module
 instance. It has no application entry function and does not call application
 exports. Link with `--no-entry --export=wasm_initialize` to include the initializer
 from the runtime archive. No browser imports are needed for initialization.
@@ -203,9 +209,10 @@ C-linkage functions.
 `npm test` checks the build pipeline and packaging. `npm run test-sysroot`
 compiles against the extracted archive and runs with Node's WebAssembly engine.
 It checks compiler-rt arithmetic, constructors, new/delete variants, memory and
-string functions, alignment, pool exhaustion/reuse, overflow, failed realloc,
-trapping new, failed memory growth with retry, and the freestanding application
-exports with explicit, one-time constructor initialization.
+string functions, alignment, dynamic growth beyond 4 MiB, pool exhaustion/reuse,
+overflow, failed realloc, trapping new, failed memory growth with retry,
+host-grown memory, allocation without browser imports, and the freestanding
+application exports with explicit, one-time constructor initialization.
 
 `npm run test-clang` tests header search, C++23/Wasm defaults, PCH-based JSON,
 comments, macros, multi-source compilation, phase ordering, output collisions,

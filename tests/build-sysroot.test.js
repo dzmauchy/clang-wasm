@@ -15,14 +15,11 @@ function fixture(rootDir) {
     fs.writeFileSync(file, contents);
   };
   write(path.join(config.llvmDir, "llvm", "LICENSE.TXT"));
-  write(path.join(config.buildSysrootDir, "browser_config.h"));
-  write(path.join(rootDir, "sysroot", "browser.hpp"));
-  write(path.join(rootDir, "sysroot", "browser.c"));
   write(path.join(config.hostLlvmDir, "lib", "clang", "23", "include", "__clang_cuda_math.h"));
-  for (const template of ["cmake/wasm32-toolchain.cmake.in", "sysroot/browser_config.h.in"]) {
+  for (const template of ["cmake/wasm32-toolchain.cmake.in"]) {
     write(path.join(rootDir, template), fs.readFileSync(path.join(projectRoot, template), "utf8"));
   }
-  for (const file of ["wasm.h", "wasm.hpp", "wasm.c", "wasm.cpp", "wasm-init.c", "tlsf/tlsf.c", "tlsf/tlsf.h"]) {
+  for (const file of ["wasm.hpp", "wasm.cpp", "browser.hpp", "browser.cpp", "tlsf/tlsf.cpp", "tlsf/tlsf.hpp"]) {
     fs.mkdirSync(path.dirname(path.join(rootDir, "sysroot", file)), { recursive: true });
     write(path.join(rootDir, "sysroot", file), fs.readFileSync(path.join(projectRoot, "sysroot", file), "utf8"));
   }
@@ -72,7 +69,6 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
     const config = fixture(rootDir);
     const log = path.join(rootDir, "commands.jsonl");
     process.env.PATH = `${mockTools(config, log)}:${previousPath}`;
-    config.sysrootHeapSize = 1048576;
     fs.mkdirSync(config.stageDir, { recursive: true });
     const sentinel = path.join(config.distDir, "clang.wasm");
     fs.writeFileSync(sentinel, "keep compiler");
@@ -89,11 +85,13 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
     assert.ok(configurations[1].includes("-DCOMPILER_RT_INSTALL_LIBRARY_DIR:STRING=lib/clang/23/lib/wasi"));
     assert.ok(commands.some(args => args.includes("install-core-resource-headers") && args.includes("install-webassembly-resource-headers")));
     assert.ok(commands.some(args => args.includes("install-clang_rt.builtins-wasm32")));
+    const compilations = commands.filter(args => args.includes("-c"));
+    assert.equal(compilations.length, 3);
+    assert.ok(compilations.every(args => args[0] === "clang++" && args.includes("-std=c++23")));
     assert.ok(commands.some(args => args[0] === "llvm-ar" &&
       args[2] === path.join(config.stageDir, "lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a") &&
-      args.includes(path.join(config.buildSysrootDir, "tlsf.c.o")) &&
-      args.includes(path.join(config.buildSysrootDir, "wasm.cpp.o")) &&
-      args.includes(path.join(config.buildSysrootDir, "wasm-init.c.o"))));
+      args.includes(path.join(config.buildSysrootDir, "tlsf.cpp.o")) &&
+      args.includes(path.join(config.buildSysrootDir, "wasm.cpp.o"))));
     assert.ok(!commands.some(args => args.includes("install-clang-resource-headers") || args.includes("--strip-debug")));
     assert.deepEqual(commands.at(-1), ["cmake", "-E", "tar", "czf", path.join(config.distDir, "sysroot.tgz"), "--format=gnutar", "sysroot"]);
     assert.equal(fs.existsSync(path.join(config.stageDir, "stale.h")), false);
@@ -104,22 +102,24 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
       assert.ok(!fs.existsSync(path.join(config.stageDir, file)), `Exclude ${file}`);
     }
     assert.equal(fs.readFileSync(sentinel, "utf8"), "keep compiler");
-    for (const file of ["include/wasm.h", "include/wasm.hpp", "include/tlsf.h",
+    for (const file of ["include/wasm.h", "include/tlsf.h"]) {
+      assert.ok(!fs.existsSync(path.join(config.stageDir, file)), `Remove C header ${file}`);
+    }
+    for (const file of ["include/wasm.hpp", "include/tlsf.hpp",
       "lib/libtlsf.a", "lib/libwasm.a", "lib/libbrowser.a", "share/licenses/TLSF-LICENSE.txt",
       "lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a", "lib/clang/23/include/new-upstream-header.h",
       "share/licenses/LLVM-LICENSE.TXT"]) {
       assert.ok(fs.existsSync(path.join(config.stageDir, file)), `Missing installed ${file}`);
     }
-    assert.match(fs.readFileSync(path.join(config.stageDir, "include", "browser_config.h"), "utf8"), /#define BROWSER_HEAP_SIZE 1048576/);
   } finally {
     process.env.PATH = previousPath;
     fs.rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test("sysroot rejects invalid heap sizes before running commands", () => {
-  for (const sysrootHeapSize of [0, 65535, 1073741825, "NaN", "65536.5", "123abc"]) {
-    assert.throws(() => buildSysroot({ sysrootHeapSize }), /SYSROOT_HEAP_SIZE must be between/);
+test("sysroot rejects invalid job counts before running commands", () => {
+  for (const ninjaJobs of [0, -1, 1.5, NaN, "4"]) {
+    assert.throws(() => buildSysroot({ ninjaJobs }), /Sysroot build jobs must be a positive integer/);
   }
 });
 

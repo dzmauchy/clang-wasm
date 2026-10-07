@@ -1,7 +1,6 @@
 #include <browser.hpp>
 #define EXPORT BROWSER_EXPORT
 #include <wasm.hpp>
-#include <browser_config.h>
 
 #if __STDC_HOSTED__ != 0
 #error "Applications must compile freestanding"
@@ -50,7 +49,7 @@ extern "C" EXPORT(heap_checks) int heap_checks() {
         memset(ptr, 0x5a, size);
         free(ptr);
     }
-    const size_t alignments[] = {16, 64, 4096};
+    const size_t alignments[] = {16, 64, 4096, 65536};
     for (size_t alignment : alignments) {
         void *ptr = aligned_alloc(alignment, alignment);
         if (!ptr || uintptr_t(ptr) % alignment) return 3;
@@ -74,19 +73,44 @@ extern "C" EXPORT(heap_checks) int heap_checks() {
     if (!ptr) return 12;
     free(ptr);
     if (calloc(impossible, 2) || *wasm_errno_location() != WASM_ENOMEM) return 13;
-    // Exhaust the pool using large blocks, then verify reuse and live data.
+    if (malloc(impossible - 15) || *wasm_errno_location() != WASM_ENOMEM) return 18;
+    if (aligned_alloc(size_t(1) << 31, 0) || *wasm_errno_location() != WASM_ENOMEM) return 19;
+    // Exhaust the module's memory limit, then verify reuse and live data.
     void *blocks[128];
     size_t count = 0;
-    const size_t chunk = BROWSER_HEAP_SIZE / 32;
+    const size_t chunk = 128 * 1024;
     while (count < 128 && (blocks[count] = malloc(chunk))) ++count;
     if (!count || count == 128 || *wasm_errno_location() != WASM_ENOMEM) return 14;
     memset(blocks[0], 0x39, chunk);
-    if (realloc(blocks[0], BROWSER_HEAP_SIZE) || static_cast<unsigned char *>(blocks[0])[0] != 0x39) return 15;
-    if (::operator new(BROWSER_HEAP_SIZE, std::nothrow)) return 16;
+    if (realloc(blocks[0], 2 * chunk) || *wasm_errno_location() != WASM_ENOMEM ||
+        static_cast<unsigned char *>(blocks[0])[0] != 0x39) return 15;
+    if (::operator new(2 * chunk, std::nothrow)) return 16;
     for (size_t i = 0; i < count; ++i) free(blocks[i]);
     ptr = static_cast<unsigned char *>(malloc(chunk));
     if (!ptr) return 17;
     free(ptr);
+    return 0;
+}
+
+extern "C" EXPORT(growth_checks) int growth_checks() {
+    const size_t first_size = 65536;
+    auto *first = static_cast<unsigned char *>(malloc(first_size));
+    if (!first) return 1;
+    memset(first, 0x27, first_size);
+    const size_t before = __builtin_wasm_memory_size(0);
+    auto *second = static_cast<unsigned char *>(calloc(2 * 1024 * 1024, 1));
+    if (!second || __builtin_wasm_memory_size(0) <= before) return 2;
+    for (size_t i = 0; i < first_size; ++i) if (first[i] != 0x27) return 3;
+    for (size_t i = 0; i < 2 * 1024 * 1024; ++i) if (second[i]) return 4;
+    auto *moved = static_cast<unsigned char *>(realloc(first, 5 * 1024 * 1024));
+    if (!moved || uintptr_t(moved) % alignof(max_align_t)) return 5;
+    for (size_t i = 0; i < first_size; ++i) if (moved[i] != 0x27) return 6;
+    free(moved);
+    free(second);
+    const size_t grown = __builtin_wasm_memory_size(0);
+    first = static_cast<unsigned char *>(malloc(5 * 1024 * 1024));
+    if (!first || __builtin_wasm_memory_size(0) != grown) return 7;
+    free(first);
     return 0;
 }
 
@@ -110,8 +134,14 @@ extern "C" EXPORT(cpp_allocation_failure) void cpp_allocation_failure() {
 }
 extern "C" EXPORT(heap_failure_checks) int heap_failure_checks() {
     *wasm_errno_location() = 0;
-    void *volatile allocation = malloc(8);
-    return allocation != nullptr || *wasm_errno_location() != WASM_ENOMEM;
+    void *volatile allocation = malloc(65536);
+    if (allocation) { free(allocation); return 1; }
+    if (*wasm_errno_location() != WASM_ENOMEM) return 2;
+    // A failed growth must still permit allocations in the existing memory.
+    allocation = malloc(8);
+    if (!allocation) return 3;
+    free(allocation);
+    return 0;
 }
 extern "C" EXPORT(constructor_count) int constructor_count() { return initialized; }
 

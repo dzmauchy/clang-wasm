@@ -204,7 +204,6 @@ export function resolveBuildConfig(options = {}) {
     hostClangPath,
     hostClangXXPath,
     hostLldPath,
-    sysrootHeapSize: options.sysrootHeapSize ?? process.env.SYSROOT_HEAP_SIZE ?? 4194304,
     cFlags: C_FLAGS,
     cxxFlags: CXX_FLAGS,
     exeLinkerFlags: EXE_LINKER_FLAGS,

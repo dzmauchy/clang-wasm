@@ -13,7 +13,6 @@ try {
       "llvm-dir": { type: "string" },
       "host-llvm-dir": { type: "string" },
       "dist-dir": { type: "string" },
-      "heap-size": { type: "string" },
       jobs: { type: "string", short: "j" },
       "dry-run": { type: "boolean" },
       test: { type: "boolean" },
@@ -30,7 +29,6 @@ try {
   --host-llvm-dir <path>   Host LLVM installation (defaults to out/llvm)
   --dist-dir <path>        Output directory (defaults to dist)
   -j, --jobs <n>          Parallel build jobs (defaults to NINJA_JOBS or 4)
-  --heap-size <bytes>      TLSF heap (defaults to SYSROOT_HEAP_SIZE or 4194304)
   --test                  Run the sysroot smoke test after building
   --test-only             Test the existing sysroot without rebuilding
   --dry-run               Simulate building without compiling
@@ -53,7 +51,6 @@ try {
       hostClangXXPath: host.clangXXPath,
       distDir: values["dist-dir"],
       ninjaJobs: values.jobs ? Number(values.jobs) : undefined,
-      sysrootHeapSize: values["heap-size"],
     });
     if (!values["test-only"]) buildSysroot(config);
     if (values.test || values["test-only"]) testSysroot(config);
