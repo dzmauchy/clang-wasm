@@ -36,6 +36,9 @@ jobs:
           LLVM_VERSION: ${{ inputs.llvm_version }}
         run: npm run build
 
+      - name: Verify custom browser compiler
+        run: npm run test-clang
+
       - name: Verify sysroot runtime
         env:
           LLVM_VERSION: ${{ inputs.llvm_version }}

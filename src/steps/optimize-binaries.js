@@ -12,7 +12,7 @@ export function optimizeWasmBinaries(config) {
   for (const tool of TOOLS) {
     const sourceDir = tool === "lld"
       ? path.join(config.wasmBinDir, "wasm-only")
-      : config.wasmBinDir;
+      : path.join(config.wasmBinDir, "custom-clang");
     const srcWasm = path.join(sourceDir, `${tool}.wasm`);
     const srcJs = path.join(sourceDir, `${tool}.js`);
     const outWasm = path.join(config.distDir, `${tool}.wasm`);

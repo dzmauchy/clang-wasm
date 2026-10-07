@@ -2,10 +2,16 @@
 
 `npm run build -- --llvm-version 23.1.2` builds browser-hosted Clang and LLD
 and produces `dist/clang.{js,wasm}`, `dist/lld.{js,wasm}`, and `dist/sysroot.tgz`.
-Clang defaults to `wasm32-unknown-unknown` and `/sysroot`.
+Clang is a custom C++ compiler launcher with fixed Wasm defaults, header search
+directories, optional JSON AST dumps, and an output directory.
 Emscripten builds the compiler tools; programs compiled with the packaged
 sysroot use LLVM libc, libc++, and libc++abi with explicit browser imports.
 Clang's default C++ standard library is libc++.
+
+The compiler launcher in `cmake/wasm-clang` links Clang's driver, frontend, and
+code generator through `LLVM_EXTERNAL_PROJECTS`, without changing LLVM's
+sources. The pipeline builds `wasm-clang` and packages its outputs from
+`build-wasm/bin/custom-clang` as `dist/clang.{js,wasm}`.
 
 The browser linker contains only LLD's WebAssembly driver. A launcher in
 `cmake/wasm-lld` is registered through `LLVM_EXTERNAL_PROJECTS` and links
@@ -21,6 +27,49 @@ LLVM, LLVM sources, and Emscripten when needed. CMake builds LLVM libc,
 libc++, libc++abi, and compiler-rt builtins from the same selected LLVM source
 release. JavaScript coordinates those dependency builds, compiles the browser
 runtime, and packages the complete sysroot.
+
+## Browser compiler options
+
+Mount the packaged sysroot at `/sysroot` and source files at `/work` in the
+Emscripten filesystem, then call the module once with:
+
+```js
+compiler.callMain([
+  "-I", "/work/include",
+  "--include-dir", "/dependencies/include",
+  "-dump",
+  "--output-dir", "/work/build",
+  "/work/main.cpp", "/work/helpers.cpp",
+]);
+```
+
+`-I<dir>`, `-I <dir>`, and `--include-dir <dir>` add header search directories
+in the specified order; repeat them as needed. `--output-dir <dir>` (or `-o <dir>`)
+creates the output directory, which defaults to the current working directory.
+`--include-dir=<dir>` and `--output-dir=<dir>` are also accepted.
+Each input produces `<stem>.o`. With `-dump`, the first pass writes
+`<stem>.json` for every source; only after all dumps succeed does the second
+pass generate objects. Read these files through `compiler.FS.readFile`.
+Diagnostics go to stderr. A failed pass returns a nonzero status; compilation
+errors remove partial outputs from that pass. Sources with the same output
+stem are rejected before any output is written.
+
+All inputs are compiled as C++. Compilation to objects is implicit; linking
+is performed separately with LLD. The launcher accepts only the options above,
+`--help`, `--version`, and `--` before source paths starting with a dash.
+The following compiler options are built in:
+
+```text
+--target=wasm32-unknown-unknown --sysroot=/sysroot
+-stdlib=libc++ -fvisibility=default -resource-dir /sysroot/lib/clang/23
+-fno-exceptions -fno-rtti -fno-threadsafe-statics -std=c++23 -O2
+-fno-color-diagnostics -fmessage-length=0 -ferror-limit=0
+-fparse-all-comments -I/work
+```
+
+The resource path is fixed to Clang 23, so use the LLVM 23 build and matching
+sysroot. During the dump pass, the launcher also supplies
+`-fsyntax-only -Xclang -ast-dump=json`; `-Xclang` must precede a frontend option.
 
 ## Build only the sysroot
 
@@ -126,8 +175,8 @@ clang++ --target=wasm32-unknown-unknown -std=c++20 -O2 \
 ```
 
 Replace `23` in the resource-library path with the selected LLVM major version.
-The same compile flags work in browser-hosted Clang. Compile to an object
-with `-c`, then pass the object to browser-hosted LLD with:
+For browser-hosted Clang, use the custom invocation above to produce objects
+with the built-in flags, then pass the objects to browser-hosted LLD with:
 
 ```text
 --no-entry --export=browser_run --export-memory program.o
@@ -178,6 +227,13 @@ constructors, and heap reservation, exhaustion, `calloc`, and `realloc`.
 It also checks trapping `new` and non-throwing allocation. A restricted-memory instance
 checks that failed heap reservation returns null with `ENOMEM`. Tests compile
 against the extracted archive and check the explicit browser imports.
+
+`npm run test-clang` tests the packaged custom compiler in a Node worker with
+the matching sysroot. It checks header search paths, C++23/Wasm defaults,
+JSON ASTs and comments, multi-source object generation, AST-before-object
+failure behavior, output directories, and invalid options. An optional first
+argument selects an unpackaged module directory and a second selects a sysroot:
+`npm run test-clang -- out/llvm-project/build-wasm/bin/custom-clang dist/sysroot`.
 
 `npm run test-lld` tests the packaged browser linker using Node workers and
 the host Clang in `out/llvm` (or `HOST_LLVM_DIR`). It links Wasm objects and

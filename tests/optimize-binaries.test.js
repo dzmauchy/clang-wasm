@@ -5,14 +5,18 @@ import os from "node:os";
 import path from "node:path";
 import { optimizeWasmBinaries } from "../src/steps/optimize-binaries.js";
 
-test("packaging selects the Wasm-only linker even when stock LLD artifacts remain", () => {
+test("packaging selects custom Clang and Wasm-only LLD despite stock artifacts", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lld packaging-"));
   try {
     const wasmBinDir = path.join(tempDir, "bin");
     const distDir = path.join(tempDir, "dist");
     fs.mkdirSync(path.join(wasmBinDir, "wasm-only"), { recursive: true });
-    fs.writeFileSync(path.join(wasmBinDir, "clang.wasm"), "clang");
-    fs.writeFileSync(path.join(wasmBinDir, "clang.js"), "clang wrapper");
+    fs.mkdirSync(path.join(wasmBinDir, "custom-clang"));
+    fs.writeFileSync(path.join(wasmBinDir, "clang.wasm"), "stock clang");
+    fs.writeFileSync(path.join(wasmBinDir, "clang.js"), "stock clang wrapper");
+    fs.writeFileSync(path.join(wasmBinDir, "custom-clang/clang.wasm"), "custom clang");
+    const clangWrapper = 'const wasmFile = "clang.wasm";';
+    fs.writeFileSync(path.join(wasmBinDir, "custom-clang/clang.js"), clangWrapper);
     fs.writeFileSync(path.join(wasmBinDir, "lld.wasm"), "stock linker");
     fs.writeFileSync(path.join(wasmBinDir, "lld.js"), "stock wrapper");
     fs.writeFileSync(path.join(wasmBinDir, "wasm-only/lld.wasm"), "wasm linker");
@@ -37,8 +41,8 @@ fs.copyFileSync(input, output);
 
     assert.equal(fs.readFileSync(path.join(distDir, "lld.wasm"), "utf8"), "wasm linker");
     assert.equal(fs.readFileSync(path.join(distDir, "lld.js"), "utf8"), wrapper);
-    assert.equal(fs.readFileSync(path.join(distDir, "clang.wasm"), "utf8"), "clang");
-    assert.equal(fs.readFileSync(path.join(distDir, "clang.js"), "utf8"), "clang wrapper");
+    assert.equal(fs.readFileSync(path.join(distDir, "clang.wasm"), "utf8"), "custom clang");
+    assert.equal(fs.readFileSync(path.join(distDir, "clang.js"), "utf8"), clangWrapper);
 
     fs.rmSync(path.join(wasmBinDir, "wasm-only/lld.wasm"));
     assert.throws(() => optimizeWasmBinaries({
@@ -49,6 +53,16 @@ fs.copyFileSync(input, output);
       wasmOptFlags: [],
       dryRun: false,
     }), /Expected output binary not found/);
+
+    fs.rmSync(path.join(wasmBinDir, "custom-clang/clang.wasm"));
+    assert.throws(() => optimizeWasmBinaries({
+      rootDir: tempDir,
+      wasmBinDir,
+      distDir,
+      wasmOptPath,
+      wasmOptFlags: [],
+      dryRun: false,
+    }), /Expected output binary not found: .*custom-clang/);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

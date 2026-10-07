@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { run, shellQuote } from "../utils/exec.js";
 
 const wasmLldSourceDir = fileURLToPath(new URL("../../cmake/wasm-lld/", import.meta.url));
+const wasmClangSourceDir = fileURLToPath(new URL("../../cmake/wasm-clang/", import.meta.url));
 
 export function buildWasmBinaries(config) {
   console.log("\n--- Cross-Compiling Clang & LLD to Wasm ---");
@@ -14,7 +15,8 @@ export function buildWasmBinaries(config) {
       -DCMAKE_CXX_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
       -DLLVM_ENABLE_ASSERTIONS=OFF
       -DLLVM_ENABLE_PROJECTS="clang;lld"
-      -DLLVM_EXTERNAL_PROJECTS=wasm-lld
+      -DLLVM_EXTERNAL_PROJECTS="wasm-clang;wasm-lld"
+      -DLLVM_EXTERNAL_WASM_CLANG_SOURCE_DIR=${shellQuote(wasmClangSourceDir)}
       -DLLVM_EXTERNAL_WASM_LLD_SOURCE_DIR=${shellQuote(wasmLldSourceDir)}
       -DLLD_BUILD_TOOLS=OFF
       -DLLVM_TARGETS_TO_BUILD="WebAssembly"
@@ -50,6 +52,7 @@ export function buildWasmBinaries(config) {
       -DCLANG_PLUGIN_SUPPORT=OFF
       -DCLANG_INCLUDE_TESTS=OFF
       -DCLANG_BUILD_TOOLS=OFF
+      -DCLANG_TOOL_DRIVER_BUILD=OFF
       -DCLANG_TOOL_APINOTES_TEST_BUILD=OFF
       -DCLANG_TOOL_C_INDEX_TEST_BUILD=OFF
       -DCLANG_TOOL_CIR_LSP_SERVER_BUILD=OFF
@@ -95,7 +98,7 @@ export function buildWasmBinaries(config) {
   run(
     `
     ninja -C build-wasm -j ${config.ninjaJobs}
-      clang
+      wasm-clang
       wasm-lld
     `,
     config.llvmDir,
