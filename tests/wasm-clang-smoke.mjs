@@ -96,6 +96,7 @@ if (isMainThread) {
   write("/work/src/answer.cpp", `
 #include <cstddef>
 #include <bit>
+#include <vector>
 #include <work_header.hpp>
 #include <first.hpp>
 #include <second.hpp>
@@ -128,9 +129,59 @@ int static_value() { static int value = seed(); return value; }
     if (stem === "answer") {
       assert.ok(nodes.some(node => node.kind === "FullComment"), "-fparse-all-comments must preserve ordinary comments");
       assert.ok(nodes.some(node => node.kind === "TextComment" && node.text.includes("Ordinary comments")));
+      for (const name of ["std", "work_value", "first_value", "second_value"])
+        assert.ok(!ast.inner?.some(node => node.name === name), `Omit included declaration ${name}`);
+      assert.ok(FS.stat(`/results/nested dump/${stem}.json`).size < 100_000,
+        "Including the standard library must not grow the dump with header declaration trees");
     }
   }
   console.log("PASS: header paths, sysroot/resource headers, C++23 defaults, comments, JSON ASTs, and multiple objects");
+
+  write("/work/macros.hpp", `
+#define SOURCE_FUNCTION(name) int name() { return 9; }
+inline int header_default(int value = 41) { return value; }
+namespace Reopened { struct HeaderOnly {}; }
+`);
+  write("/work/namespace_header.hpp", "struct NamespaceHeaderOnly {};\n");
+  write("/work/linkage_header.hpp", "int linkage_header_only();\n");
+  write("/work/src/filtered.cpp", `
+#include <macros.hpp>
+SOURCE_FUNCTION(macro_function)
+namespace Reopened {
+  // Preserve source-owned namespaces and their comments.
+  int source_function() { auto inferred = header_default(); return inferred; }
+}
+namespace SourceNamespace {
+#include <namespace_header.hpp>
+  struct SourceRecord { int member; };
+}
+extern "C" {
+#include <linkage_header.hpp>
+  int source_export() { return 42; }
+}
+#line 1 "pretend_header.hpp"
+int remapped_source() { return 1; }
+`);
+  succeeds(["-dump", "--output-dir", "/results/filtered", "/work/src/filtered.cpp"]);
+  checkObject("/results/filtered/filtered.o");
+  const filtered = JSON.parse(FS.readFile("/results/filtered/filtered.json", { encoding: "utf8" }));
+  const filteredNodes = descendants(filtered);
+  for (const name of ["macro_function", "source_function", "SourceRecord", "member", "source_export", "remapped_source"])
+    assert.ok(filteredNodes.some(node => node.name === name), `Retain source declaration ${name}`);
+  for (const name of ["HeaderOnly", "NamespaceHeaderOnly", "linkage_header_only", "header_default"])
+    assert.ok(!filteredNodes.some(node => node.name === name), `Omit included declaration ${name}`);
+  assert.ok(filteredNodes.some(node => node.kind === "CompoundStmt"), "Retain function bodies");
+  assert.ok(filteredNodes.some(node => node.name === "inferred" && node.type?.qualType === "int"), "Retain inferred types");
+  assert.ok(filteredNodes.some(node => node.kind === "CXXDefaultArgExpr"), "Retain default argument expressions");
+  assert.ok(filteredNodes.some(node => node.kind === "TextComment" && node.text.includes("source-owned")), "Retain comments");
+  assert.equal(filtered.inner.filter(node => node.kind === "NamespaceDecl" && node.name === "Reopened").length, 1,
+    "Omit the header namespace and retain its source-owned reopening");
+  write("/work/src/empty.cpp", "#include <vector>\n");
+  succeeds(["-dump", "--output-dir", "/results/filtered", "/work/src/empty.cpp"]);
+  const empty = JSON.parse(FS.readFile("/results/filtered/empty.json", { encoding: "utf8" }));
+  assert.equal(empty.kind, "TranslationUnitDecl");
+  assert.equal(empty.inner?.length || 0, 0, "A header-only input must emit a valid empty translation unit");
+  console.log("PASS: source-only ASTs preserve bodies, types, comments, macros, #line, and namespace/linkage wrappers");
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "wasm-clang-smoke-"));
   try {

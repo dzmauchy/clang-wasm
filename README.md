@@ -50,6 +50,12 @@ creates the output directory, which defaults to the current working directory.
 Each input produces `<stem>.o`. With `-dump`, the first pass writes
 `<stem>.json` for every source; only after all dumps succeed does the second
 pass generate objects. Read these files through `compiler.FS.readFile`.
+Each JSON dump contains a `TranslationUnitDecl` with declarations from that
+input source file. Included header declarations and builtins are omitted;
+headers are still parsed normally for compilation. Source declarations retain
+their bodies, types, comments, and references to header declarations, including
+default argument expressions. Macro-generated declarations are selected by
+their expansion location; `#line` directives do not change file selection.
 Diagnostics go to stderr. A failed pass returns a nonzero status; compilation
 errors remove partial outputs from that pass. Sources with the same output
 stem are rejected before any output is written.

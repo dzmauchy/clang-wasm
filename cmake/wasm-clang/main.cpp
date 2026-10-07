@@ -1,13 +1,14 @@
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/JSONNodeDumper.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Version.h"
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/Job.h"
 #include "clang/Driver/Tool.h"
-#include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -113,8 +114,63 @@ std::string outputPath(const Options &options, llvm::StringRef source,
   return std::string(path);
 }
 
-// Clang's stock ASTDumpAction always writes to stdout, ignoring -o. Use its
-// JSON consumer with a managed output stream so errors remove partial dumps.
+// Retain the normal JSON shape and complete bodies of source declarations,
+// without traversing the much larger declaration trees of included headers.
+class MainFileASTConsumer : public clang::ASTConsumer {
+  std::unique_ptr<llvm::raw_pwrite_stream> output;
+
+  static void dumpDeclaration(clang::JSONDumper &dumper,
+                              const clang::Decl *decl,
+                              const clang::SourceManager &sourceManager) {
+    const auto location = sourceManager.getExpansionLoc(decl->getLocation());
+    if (location.isInvalid() ||
+        !sourceManager.isWrittenInMainFile(location))
+      return;
+
+    // An include can appear inside a source-owned namespace, extern "C", or
+    // export block. Filter their children too, preserving the wrapper itself.
+    if (llvm::isa<clang::NamespaceDecl, clang::LinkageSpecDecl,
+                  clang::ExportDecl>(decl)) {
+      auto &nodeDumper = dumper.doGetNodeDelegate();
+      nodeDumper.AddChild([&, decl] {
+        nodeDumper.Visit(decl);
+        for (const auto *child : llvm::cast<clang::DeclContext>(decl)->decls())
+          dumpDeclaration(dumper, child, sourceManager);
+        for (const auto *attribute : decl->attrs())
+          dumper.Visit(attribute);
+        if (const auto *comment =
+                decl->getASTContext().getLocalCommentForDeclUncached(decl))
+          dumper.Visit(comment, comment);
+      });
+    } else {
+      // Keep expression trees, type information, default arguments, and
+      // comments, including references to declarations supplied by headers.
+      dumper.Visit(decl);
+    }
+  }
+
+public:
+  explicit MainFileASTConsumer(
+      std::unique_ptr<llvm::raw_pwrite_stream> output)
+      : output(std::move(output)) {}
+
+  void HandleTranslationUnit(clang::ASTContext &context) override {
+    const auto &sourceManager = context.getSourceManager();
+    clang::JSONDumper dumper(*output, sourceManager, context,
+                            context.getPrintingPolicy(),
+                            &context.getCommentCommandTraits());
+    const auto *unit = context.getTranslationUnitDecl();
+    auto &nodeDumper = dumper.doGetNodeDelegate();
+    nodeDumper.AddChild([&] {
+      nodeDumper.Visit(unit);
+      for (const auto *decl : unit->decls())
+        dumpDeclaration(dumper, decl, sourceManager);
+    });
+    *output << '\n';
+  }
+};
+
+// A managed output stream lets Clang remove partial dumps on parse errors.
 class JsonASTDumpAction : public clang::ASTFrontendAction {
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &compiler,
@@ -122,8 +178,7 @@ class JsonASTDumpAction : public clang::ASTFrontendAction {
     auto output = compiler.createDefaultOutputFile(false, input, "json");
     if (!output)
       return nullptr;
-    return clang::CreateASTDumper(std::move(output), "", true, false, false,
-                                  false, clang::ADOF_JSON);
+    return std::make_unique<MainFileASTConsumer>(std::move(output));
   }
 };
 
