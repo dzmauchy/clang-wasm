@@ -3,54 +3,6 @@ import path from "node:path";
 import { run, shellQuote } from "../utils/exec.js";
 import { configureNativeLlvm } from "./build-native-tools.js";
 
-// Keep all target runtimes on the same LLVM source release and bare-metal ABI.
-const RUNTIME_OPTIONS = [
-  "-DCMAKE_BUILD_TYPE=MinSizeRel",
-  "-DCMAKE_POSITION_INDEPENDENT_CODE=OFF",
-  "-DLLVM_ENABLE_RUNTIMES=libc;libcxxabi;libcxx",
-  "-DLLVM_DEFAULT_TARGET_TRIPLE=wasm32-unknown-unknown",
-  "-DLIBC_TARGET_TRIPLE=wasm32-unknown-unknown",
-  "-DLLVM_LIBC_FULL_BUILD=ON",
-  "-DLLVM_INCLUDE_TESTS=OFF",
-  "-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF",
-  "-DRUNTIMES_USE_LIBC=llvm-libc",
-  "-DLIBC_CONF_ERRNO_MODE=LIBC_ERRNO_MODE_EXTERNAL",
-  "-DLIBC_CONF_THREAD_MODE=LIBC_THREAD_MODE_SINGLE",
-  "-DLIBC_CONF_PRINTF_DISABLE_FLOAT=OFF",
-  "-DLIBC_CONF_SCANF_DISABLE_FLOAT=OFF",
-  "-DLIBC_CONF_MATH_OPTIMIZATIONS=LIBC_MATH_NO_EXCEPT",
-  "-DLIBCXX_ENABLE_SHARED=OFF",
-  "-DLIBCXX_ENABLE_STATIC=ON",
-  "-DLIBCXX_CXX_ABI=libcxxabi",
-  "-DLIBCXX_STATICALLY_LINK_ABI_IN_STATIC_LIBRARY=OFF",
-  "-DLIBCXX_USE_COMPILER_RT=ON",
-  "-DLIBCXX_HAS_PTHREAD_LIB=OFF",
-  "-DLIBCXX_HAS_RT_LIB=OFF",
-  "-DLIBCXX_HAS_ATOMIC_LIB=OFF",
-  "-DLIBCXXABI_HAS_PTHREAD_LIB=OFF",
-  "-DLIBCXXABI_HAS_GCC_S_LIB=OFF",
-  "-DLIBCXX_ENABLE_THREADS=OFF",
-  "-DLIBCXX_ENABLE_RTTI=OFF",
-  "-DLIBCXX_ENABLE_EXCEPTIONS=OFF",
-  "-DLIBCXX_ENABLE_FILESYSTEM=OFF",
-  "-DLIBCXX_ENABLE_LOCALIZATION=OFF",
-  "-DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF",
-  "-DLIBCXX_ENABLE_RANDOM_DEVICE=OFF",
-  "-DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF",
-  "-DLIBCXX_ENABLE_TIME_ZONE_DATABASE=OFF",
-  "-DLIBCXX_INCLUDE_BENCHMARKS=OFF",
-  "-DLIBCXX_INSTALL_MODULES=OFF",
-  "-DLIBCXXABI_ENABLE_SHARED=OFF",
-  "-DLIBCXXABI_ENABLE_STATIC=ON",
-  "-DLIBCXXABI_ENABLE_THREADS=OFF",
-  "-DLIBCXXABI_ENABLE_RTTI=OFF",
-  "-DLIBCXXABI_ENABLE_EXCEPTIONS=OFF",
-  "-DLIBCXXABI_USE_LLVM_UNWINDER=OFF",
-  "-DLIBCXXABI_USE_COMPILER_RT=ON",
-  "-DLIBCXXABI_BAREMETAL=ON",
-  "-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON",
-];
-
 function command(config, args, cwd = config.rootDir) {
   run(args.map(shellQuote).join(" "), cwd, {}, config.dryRun);
 }
@@ -86,25 +38,21 @@ export function packageSysroot(config) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.cpSync(source, target, { recursive: true });
   };
-  if (config.sysrootRuntime === "wamr") {
-    copy(path.join(config.rootDir, "sysroot", "wamr.h"), "include/wamr.h");
-    copy(path.join(config.rootDir, "sysroot", "wamr.hpp"), "include/wamr.hpp");
-    for (const file of ["wamr-host.c", "wamr-host.h", "README.md"]) {
-      copy(path.join(config.rootDir, "sysroot", "wamr", file), `share/wamr/${file}`);
-    }
-  } else {
-    copy(path.join(config.rootDir, "sysroot", "browser.hpp"), "include/browser.hpp");
-    copy(path.join(config.buildSysrootDir, "browser_config.h"), "include/browser_config.h");
+  for (const header of ["wasm.h", "wasm.hpp"]) {
+    copy(path.join(config.rootDir, "sysroot", header), `include/${header}`);
   }
+  copy(path.join(config.buildSysrootDir, "browser_config.h"), "include/browser_config.h");
+  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.h"), "include/tlsf.h");
+  copy(path.join(config.rootDir, "sysroot", "tlsf", "tlsf.h"), "share/licenses/TLSF-LICENSE.txt");
+  copy(path.join(config.rootDir, "sysroot", "browser.hpp"), "include/browser.hpp");
   copy(path.join(config.llvmDir, "llvm", "LICENSE.TXT"), "share/licenses/LLVM-LICENSE.TXT");
   // Use CMake's bundled archiver so packaging adds no build-host dependency.
-  command(config, ["cmake", "-E", "tar", "czf", path.join(config.distDir, config.sysrootArchive ?? "sysroot.tgz"),
+  command(config, ["cmake", "-E", "tar", "czf", path.join(config.distDir, "sysroot.tgz"),
     "--format=gnutar", path.basename(stageDir)], config.distDir);
 }
 
 export function buildSysroot(config) {
-  const wamr = config.sysrootRuntime === "wamr";
-  console.log("\n--- Building and Archiving LLVM libc + libc++ + libc++abi Sysroot ---");
+  console.log("\n--- Building and Archiving TLSF + compiler-rt Sysroot ---");
   const heapSize = String(config.sysrootHeapSize ?? 4194304);
   if (!/^\d+$/.test(heapSize) || Number(heapSize) < 65536 || Number(heapSize) > 1073741824) {
     throw new Error("SYSROOT_HEAP_SIZE must be between 65536 and 1073741824 bytes");
@@ -115,8 +63,6 @@ export function buildSysroot(config) {
   const toolchainFile = path.join(config.buildSysrootDir, "wasm32-toolchain.cmake");
   const installDir = config.stageDir;
   const headersBuildDir = path.join(config.buildSysrootDir, "clang-headers-build");
-  // Reuse dependency build directories created by the previous CMake wrapper.
-  const runtimesBuildDir = path.join(config.buildSysrootDir, "llvm_runtimes-prefix", "src", "llvm_runtimes-build");
   const builtinsBuildDir = path.join(config.buildSysrootDir, "compiler_rt-prefix", "src", "compiler_rt-build");
   const tools = {
     SYSROOT_CLANG: config.hostClangPath,
@@ -143,52 +89,47 @@ export function buildSysroot(config) {
     "install-core-resource-headers", "install-webassembly-resource-headers", "--parallel", config.ninjaJobs]);
   const resourceDir = resourceDirectory(installDir, config.dryRun);
 
-  for (const script of ["prepare-llvm-libc.cmake", "prepare-libcxx.cmake"]) {
-    command(config, ["cmake", `-DLLVM_SOURCE_DIR=${config.llvmDir}`, "-P", path.join(config.rootDir, "cmake", script)]);
-  }
-  if (wamr) {
-    command(config, ["cmake", `-DLLVM_SOURCE_DIR=${config.llvmDir}`, "-P",
-      path.join(config.rootDir, "cmake", "prepare-wamr-allocator.cmake")]);
-  }
-  command(config, ["cmake", "-G", "Ninja", "-S", path.join(config.llvmDir, "runtimes"), "-B", runtimesBuildDir,
-    `-DCMAKE_TOOLCHAIN_FILE=${toolchainFile}`, `-DCMAKE_INSTALL_PREFIX=${installDir}`,
-    `-DCMAKE_CXX_FLAGS=-DBROWSER_HEAP_SIZE=${heapSize}${wamr ? " -DWAMR_SYSROOT=1" : ""} -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti`,
-    ...RUNTIME_OPTIONS]);
-  command(config, ["cmake", "--build", runtimesBuildDir, "--target", "libc", "libm", "cxx", "cxxabi",
-    "--parallel", config.ninjaJobs]);
-  command(config, ["cmake", "--build", runtimesBuildDir, "--target", "install-libc", "install-cxx", "install-cxxabi",
-    "--parallel", config.ninjaJobs]);
-
   command(config, ["cmake", "-G", "Ninja", "-S", path.join(config.llvmDir, "compiler-rt", "lib", "builtins"),
     "-B", builtinsBuildDir, `-DCMAKE_TOOLCHAIN_FILE=${toolchainFile}`, "-DCMAKE_BUILD_TYPE=MinSizeRel",
     `-DCMAKE_INSTALL_PREFIX=${installDir}`,
     // Clang's Wasm driver searches its resource directory here, including
     // for wasm32-unknown-unknown. Let compiler-rt install directly there.
     `-DCOMPILER_RT_INSTALL_LIBRARY_DIR:STRING=lib/clang/${path.basename(resourceDir)}/lib/wasi`,
-    `-DCMAKE_C_FLAGS=--sysroot=${installDir} -ffunction-sections -fdata-sections`,
+    `-DCMAKE_C_FLAGS=--sysroot=${installDir} -ffreestanding -ffunction-sections -fdata-sections`,
     "-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON", "-DCOMPILER_RT_BAREMETAL_BUILD=ON",
     "-DCOMPILER_RT_BUILTINS_ENABLE_PIC=OFF", "-DCOMPILER_RT_INCLUDE_TESTS=OFF",
     "-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF", "-DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON"]);
   command(config, ["cmake", "--build", builtinsBuildDir, "--target", "install-clang_rt.builtins-wasm32",
     "--parallel", config.ninjaJobs]);
-  const runtimeFlags = wamr ? ["-DWAMR_SYSROOT=1"] : [];
-  const runtimeObjects = [path.join(config.buildSysrootDir, "browser.o")];
-  command(config, [config.hostClangPath, "--target=wasm32-unknown-unknown", "-std=c11", "-Oz",
-    `--sysroot=${installDir}`, `-I${config.buildSysrootDir}`, ...runtimeFlags, "-ffunction-sections", "-fdata-sections",
-    "-c", path.join(config.rootDir, "sysroot", "browser.c"), "-o", path.join(config.buildSysrootDir, "browser.o")]);
-  if (wamr) {
-    const object = path.join(config.buildSysrootDir, "wamr-allocator.o");
-    command(config, [config.hostClangPath, "--target=wasm32-unknown-unknown", "-std=c11", "-Oz",
-      `--sysroot=${installDir}`, "-ffunction-sections", "-fdata-sections", "-c",
-      path.join(config.rootDir, "sysroot", "wamr-allocator.c"), "-o", object]);
-    runtimeObjects.push(object);
+  const flags = ["--target=wasm32-unknown-unknown", "-Oz", "-ffreestanding", "-fno-builtin",
+    `--sysroot=${installDir}`, `-I${config.rootDir}/sysroot`, `-I${config.buildSysrootDir}`,
+    "-ffunction-sections", "-fdata-sections"];
+  const compile = (source, cxx = false) => {
+    const object = path.join(config.buildSysrootDir, `${path.basename(source)}.o`);
+    command(config, [cxx ? config.hostClangXXPath : config.hostClangPath, ...flags,
+      ...(cxx ? ["-std=c++23", "-nostdinc++", "-fno-exceptions", "-fno-rtti", "-fno-threadsafe-statics"] : ["-std=c11"]),
+      "-c", path.join(config.rootDir, "sysroot", source), "-o", object]);
+    return object;
+  };
+  const tlsfObject = compile("tlsf/tlsf.c");
+  const runtimeObjects = [compile("wasm.c"), compile("wasm.cpp", true), compile("wasm-init.c")];
+  const hostObject = compile("browser.c");
+  for (const [library, objects] of [
+    ["libtlsf.a", [tlsfObject]], ["libwasm.a", runtimeObjects],
+    ["libbrowser.a", [hostObject]],
+  ]) {
+    command(config, [tools.SYSROOT_AR, "rcs", path.join(installDir, "lib", library), ...objects]);
   }
-  command(config, [tools.SYSROOT_AR, "rcs", path.join(installDir, "lib", wamr ? "libwamr.a" : "libbrowser.a"),
-    ...runtimeObjects]);
+
+  // The default compiler-rt library also supplies the freestanding allocation
+  // and memory runtime. Keep the split archives available for explicit links.
+  command(config, [tools.SYSROOT_AR, "rcs",
+    path.join(resourceDir, "lib", "wasi", "libclang_rt.builtins-wasm32.a"),
+    ...runtimeObjects, tlsfObject]);
 
   if (config.dryRun) {
     fs.mkdirSync(config.distDir, { recursive: true });
-    fs.writeFileSync(path.join(config.distDir, config.sysrootArchive ?? "sysroot.tgz"), "mock-sysroot-tar-gz\n");
+    fs.writeFileSync(path.join(config.distDir, "sysroot.tgz"), "mock-sysroot-tar-gz\n");
     return;
   }
   packageSysroot(config);

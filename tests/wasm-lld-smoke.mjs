@@ -25,6 +25,7 @@ if (!isMainThread) {
     printErr: (line) => output.push(line),
   });
   for (const [name, bytes] of workerData.files) {
+    module.FS.mkdirTree(path.posix.dirname(name));
     module.FS.writeFile(name, bytes);
   }
   const status = module.callMain(workerData.args);
@@ -36,6 +37,9 @@ if (!isMainThread) {
   const rootDir = fileURLToPath(new URL("../", import.meta.url));
   const moduleDir = path.resolve(process.argv[2] || path.join(rootDir, "dist"));
   const hostBinDir = path.join(process.env.HOST_LLVM_DIR || path.join(rootDir, "out/llvm"), "bin");
+  const sysrootDir = path.resolve(process.argv[3] || path.join(rootDir, "dist/sysroot"));
+  const builtinsPath = "lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a";
+  const builtins = fs.readFileSync(path.join(sysrootDir, builtinsPath));
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "wasm-lld-smoke-"));
 
   async function link(args, files = []) {
@@ -44,7 +48,7 @@ if (!isMainThread) {
         moduleUrl: pathToFileURL(path.join(moduleDir, "lld.js")).href,
         wasmPath: path.join(moduleDir, "lld.wasm"),
         args,
-        files,
+        files: [[`/sysroot/${builtinsPath}`, builtins], ...files],
       },
     });
     try {
@@ -86,6 +90,60 @@ if (!isMainThread) {
       assert.equal(instance.exports.answer(), 42);
       console.log(`PASS: links ${name} input and executes its export`);
     }
+
+    const runtimeSource = path.join(tempDir, "runtime.cpp");
+    const runtimeObject = path.join(tempDir, "runtime.o");
+    fs.writeFileSync(runtimeSource, `
+#include <wasm.hpp>
+static volatile int initialized;
+struct Initialize { Initialize() { initialized = initialized + 1; } };
+static Initialize initialize;
+extern "C" int constructor_count() { return initialized; }
+extern "C" int runtime_check() {
+  volatile int *values = new int[2]{20, 22};
+  int result = values[0] + values[1];
+  delete[] values;
+  return result;
+}
+__attribute__((noinline)) static unsigned __int128 divide_wide(unsigned __int128 a, unsigned __int128 b) { return a / b; }
+extern "C" unsigned long long divide_check(unsigned long long low, unsigned long long high, unsigned long long divisor) {
+  return (unsigned long long)divide_wide(((unsigned __int128)high << 64) | low, divisor);
+}
+`);
+    execFileSync(path.join(hostBinDir, "clang++"), [
+      "--target=wasm32-unknown-unknown", "-std=c++23", "-O2", "-ffreestanding",
+      "-nostdinc++", "-fno-exceptions", "-fno-rtti", "-fno-threadsafe-statics",
+      `--sysroot=${sysrootDir}`, `-resource-dir=${sysrootDir}/lib/clang/23`,
+      "-c", runtimeSource, "-o", runtimeObject,
+    ]);
+    const runtimeArgs = [
+      "--no-entry", "--export=wasm_initialize", "--export=constructor_count",
+      "--export=runtime_check", "--export=divide_check", "/runtime.o", "-o", "/result.wasm",
+    ];
+    const runtime = await link(runtimeArgs, [["/runtime.o", fs.readFileSync(runtimeObject)]]);
+    assert.equal(runtime.status, 0, runtime.output);
+    const runtimeModule = await WebAssembly.compile(runtime.wasm);
+    assert.deepEqual(WebAssembly.Module.imports(runtimeModule), []);
+    const runtimeInstance = await WebAssembly.instantiate(runtimeModule);
+    assert.equal(runtimeInstance.exports.constructor_count(), 0);
+    runtimeInstance.exports.wasm_initialize();
+    assert.equal(runtimeInstance.exports.constructor_count(), 1);
+    assert.equal(runtimeInstance.exports.runtime_check(), 42);
+    runtimeInstance.exports.wasm_initialize();
+    assert.equal(runtimeInstance.exports.constructor_count(), 1);
+    assert.equal(runtimeInstance.exports.divide_check(100n, 1n, 3n), ((1n << 64n) + 100n) / 3n);
+    console.log("PASS: default builtins supply arithmetic, TLSF, new/delete, and explicit constructors without host imports");
+
+    const override = await link(["-L/alternate", ...runtimeArgs], [
+      ["/runtime.o", fs.readFileSync(runtimeObject)],
+      ["/alternate/libclang_rt.builtins-wasm32.a", builtins],
+      [`/sysroot/${builtinsPath}`, new Uint8Array()],
+    ]);
+    assert.equal(override.status, 0, override.output);
+    const overrideInstance = await WebAssembly.instantiate(override.wasm);
+    overrideInstance.instance.exports.wasm_initialize();
+    assert.equal(overrideInstance.instance.exports.runtime_check(), 42);
+    console.log("PASS: user library paths take precedence over the default sysroot path");
 
     const version = await link(["-flavor", "wasm", "--version"]);
     assert.equal(version.status, 0, version.output);

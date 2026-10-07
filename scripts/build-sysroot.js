@@ -30,7 +30,7 @@ try {
   --host-llvm-dir <path>   Host LLVM installation (defaults to out/llvm)
   --dist-dir <path>        Output directory (defaults to dist)
   -j, --jobs <n>          Parallel build jobs (defaults to NINJA_JOBS or 4)
-  --heap-size <bytes>      Browser heap (defaults to SYSROOT_HEAP_SIZE or 4194304)
+  --heap-size <bytes>      TLSF heap (defaults to SYSROOT_HEAP_SIZE or 4194304)
   --test                  Run the sysroot smoke test after building
   --test-only             Test the existing sysroot without rebuilding
   --dry-run               Simulate building without compiling

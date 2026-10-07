@@ -23,7 +23,8 @@
           js_time: () => Date.now(),
         },
       });
-      const status = instance.exports.browser_run();
+      instance.exports.wasm_initialize();
+      const status = instance.exports.run_demo();
       output.textContent = new TextDecoder().decode(new Uint8Array(bytes));
       output.textContent += `\nProgram returned ${status}.`;
     } catch (error) {

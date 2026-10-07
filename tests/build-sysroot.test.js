@@ -22,7 +22,8 @@ function fixture(rootDir) {
   for (const template of ["cmake/wasm32-toolchain.cmake.in", "sysroot/browser_config.h.in"]) {
     write(path.join(rootDir, template), fs.readFileSync(path.join(projectRoot, template), "utf8"));
   }
-  for (const file of ["wamr.h", "wamr.hpp", "wamr-allocator.c", "wamr/wamr-host.c", "wamr/wamr-host.h", "wamr/README.md"]) {
+  for (const file of ["wasm.h", "wasm.hpp", "wasm.c", "wasm.cpp", "wasm-init.c", "tlsf/tlsf.c", "tlsf/tlsf.h"]) {
+    fs.mkdirSync(path.dirname(path.join(rootDir, "sysroot", file)), { recursive: true });
     write(path.join(rootDir, "sysroot", file), fs.readFileSync(path.join(projectRoot, "sysroot", file), "utf8"));
   }
   return config;
@@ -46,19 +47,10 @@ if (args.includes('install-core-resource-headers') && args.includes('install-web
     write(path.join(stage, 'lib/clang/23/include', header));
   }
 }
-if (args.includes('install-libc') && args.includes('install-cxx') && args.includes('install-cxxabi')) {
-  for (const header of ['stdio.h', 'c++/v1/vector', 'c++/v1/cxxabi.h', 'llvm-libc-types/FILE.h']) {
-    write(path.join(stage, 'include', header));
-  }
-  for (const library of ['wasm32-unknown-unknown/libc.a', 'wasm32-unknown-unknown/libm.a',
-    'libc++.a', 'libc++abi.a', 'libc++experimental.a', 'new-upstream-wasm-library.a']) {
-    write(path.join(stage, 'lib', library));
-  }
-}
 if (args.includes('install-clang_rt.builtins-wasm32')) {
   write(path.join(stage, 'lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a'));
 }
-if (tool === 'clang' && args.includes('-o')) write(args[args.indexOf('-o') + 1], 'browser object');
+if ((tool === 'clang' || tool === 'clang++') && args.includes('-o')) write(args[args.indexOf('-o') + 1], 'browser object');
 if (tool === 'llvm-ar' && args[0] === 'rcs') write(args[1], 'browser archive');
 `;
   for (const tool of [path.join(binDir, "cmake"), config.hostClangPath,
@@ -88,25 +80,32 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
     buildSysroot(config);
     const commands = readCommands(log);
     const configurations = commands.filter(args => args.includes("-S"));
-    assert.equal(configurations.length, 3);
+    assert.equal(configurations.length, 2);
     for (const configuration of configurations) {
       assert.ok(configuration.includes(`-DCMAKE_INSTALL_PREFIX=${config.stageDir}`));
     }
     assert.ok(configurations[0].includes("-DLLVM_TARGETS_TO_BUILD=WebAssembly"));
-    assert.ok(configurations[1].includes("-DLLVM_ENABLE_RUNTIMES=libc;libcxxabi;libcxx"));
-    assert.ok(configurations[2].includes("-DCOMPILER_RT_INSTALL_LIBRARY_DIR:STRING=lib/clang/23/lib/wasi"));
+    assert.ok(!commands.some(args => args.some(arg => /LIBCXX|LLVM_ENABLE_RUNTIMES|prepare-.*libc/.test(arg))));
+    assert.ok(configurations[1].includes("-DCOMPILER_RT_INSTALL_LIBRARY_DIR:STRING=lib/clang/23/lib/wasi"));
     assert.ok(commands.some(args => args.includes("install-core-resource-headers") && args.includes("install-webassembly-resource-headers")));
     assert.ok(commands.some(args => args.includes("install-clang_rt.builtins-wasm32")));
+    assert.ok(commands.some(args => args[0] === "llvm-ar" &&
+      args[2] === path.join(config.stageDir, "lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a") &&
+      args.includes(path.join(config.buildSysrootDir, "tlsf.c.o")) &&
+      args.includes(path.join(config.buildSysrootDir, "wasm.cpp.o")) &&
+      args.includes(path.join(config.buildSysrootDir, "wasm-init.c.o"))));
     assert.ok(!commands.some(args => args.includes("install-clang-resource-headers") || args.includes("--strip-debug")));
     assert.deepEqual(commands.at(-1), ["cmake", "-E", "tar", "czf", path.join(config.distDir, "sysroot.tgz"), "--format=gnutar", "sysroot"]);
     assert.equal(fs.existsSync(path.join(config.stageDir, "stale.h")), false);
     assert.equal(fs.existsSync(path.join(config.stageDir, "lib/clang/23/include/__clang_cuda_math.h")), false);
-    assert.equal(fs.existsSync(path.join(config.stageDir, "lib/libc.a")), false, "Preserve LLVM's libc install layout");
+    assert.equal(fs.existsSync(path.join(config.stageDir, "lib/libc.a")), false, "Do not package libc");
     assert.equal(fs.existsSync(path.join(config.stageDir, "lib/libclang_rt.builtins-wasm32.a")), false, "Do not duplicate LLVM's installed builtins");
+    for (const file of ["include/c++", "include/llvm-libc-types", "lib/libc++.a", "lib/libc++abi.a", "lib/wasm32-unknown-unknown/libc.a"]) {
+      assert.ok(!fs.existsSync(path.join(config.stageDir, file)), `Exclude ${file}`);
+    }
     assert.equal(fs.readFileSync(sentinel, "utf8"), "keep compiler");
-    for (const file of ["include/c++/v1/vector", "include/c++/v1/cxxabi.h", "include/llvm-libc-types/FILE.h",
-      "lib/wasm32-unknown-unknown/libc.a", "lib/wasm32-unknown-unknown/libm.a", "lib/libc++.a",
-      "lib/libc++abi.a", "lib/libc++experimental.a", "lib/libbrowser.a", "lib/new-upstream-wasm-library.a",
+    for (const file of ["include/wasm.h", "include/wasm.hpp", "include/tlsf.h",
+      "lib/libtlsf.a", "lib/libwasm.a", "lib/libbrowser.a", "share/licenses/TLSF-LICENSE.txt",
       "lib/clang/23/lib/wasi/libclang_rt.builtins-wasm32.a", "lib/clang/23/include/new-upstream-header.h",
       "share/licenses/LLVM-LICENSE.TXT"]) {
       assert.ok(fs.existsSync(path.join(config.stageDir, file)), `Missing installed ${file}`);
@@ -121,41 +120,6 @@ test("LLVM installs directly into a clean sysroot without JavaScript file select
 test("sysroot rejects invalid heap sizes before running commands", () => {
   for (const sysrootHeapSize of [0, 65535, 1073741825, "NaN", "65536.5", "123abc"]) {
     assert.throws(() => buildSysroot({ sysrootHeapSize }), /SYSROOT_HEAP_SIZE must be between/);
-  }
-});
-
-test("WAMR builds into a separate sysroot with host allocation and its embedding adapter", () => {
-  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "wamr-sysroot-"));
-  const previousPath = process.env.PATH;
-  try {
-    const config = fixture(rootDir);
-    config.sysrootRuntime = "wamr";
-    config.sysrootArchive = "wamrsr.tgz";
-    config.stageDir = path.join(config.distDir, "wamrsr");
-    config.buildSysrootDir = path.join(rootDir, "out", "build-wamr-sysroot");
-    fs.mkdirSync(path.join(config.distDir, "sysroot"), { recursive: true });
-    const sentinel = path.join(config.distDir, "sysroot", "existing.h");
-    fs.writeFileSync(sentinel, "browser sysroot");
-    const log = path.join(rootDir, "commands.jsonl");
-    process.env.PATH = `${mockTools(config, log)}:${previousPath}`;
-    buildSysroot(config);
-    const commands = readCommands(log);
-    assert.ok(commands.some(args => args.includes(path.join(rootDir, "cmake", "prepare-wamr-allocator.cmake"))));
-    assert.ok(commands.some(args => args.some(arg => arg.startsWith("-DCMAKE_CXX_FLAGS=") && arg.includes("-DWAMR_SYSROOT=1"))));
-    assert.ok(commands.some(args => args.includes(path.join(rootDir, "sysroot", "wamr-allocator.c"))));
-    assert.deepEqual(commands.at(-1), ["cmake", "-E", "tar", "czf", path.join(config.distDir, "wamrsr.tgz"),
-      "--format=gnutar", "wamrsr"]);
-    assert.equal(fs.readFileSync(sentinel, "utf8"), "browser sysroot");
-    for (const file of ["include/wamr.h", "include/wamr.hpp", "lib/libwamr.a", "share/wamr/wamr-host.c",
-      "share/wamr/wamr-host.h", "share/wamr/README.md"]) {
-      assert.ok(fs.existsSync(path.join(config.stageDir, file)), `Missing ${file}`);
-    }
-    for (const file of ["lib/libbrowser.a", "include/browser.hpp", "include/browser_config.h"]) {
-      assert.equal(fs.existsSync(path.join(config.stageDir, file)), false);
-    }
-  } finally {
-    process.env.PATH = previousPath;
-    fs.rmSync(rootDir, { recursive: true, force: true });
   }
 });
 

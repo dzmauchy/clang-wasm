@@ -8,6 +8,10 @@ int main(int argc, char **argv) {
   llvm::SmallVector<const char *, 256> args(argv, argv + argc);
   // The browser invokes lld.js, whose name does not identify a linker flavor.
   args[0] = "wasm-ld";
+  // Match the custom compiler's resource directory. User-provided -L paths
+  // take precedence; archive members are loaded only when needed.
+  args.push_back("-L/sysroot/lib/clang/23/lib/wasi");
+  args.push_back("-lclang_rt.builtins-wasm32");
   const lld::DriverDef drivers[] = {{lld::Wasm, &lld::wasm::link}};
   const auto result = lld::lldMain(args, llvm::outs(), llvm::errs(), drivers);
   if (!result.canRunAgain)

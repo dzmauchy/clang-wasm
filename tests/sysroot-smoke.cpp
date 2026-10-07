@@ -1,141 +1,127 @@
 #include <browser.hpp>
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <chrono>
-#include <format>
-#include <functional>
-#include <memory>
-#include <memory_resource>
-#include <new>
-#include <numeric>
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <errno.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#define EXPORT BROWSER_EXPORT
+#include <wasm.hpp>
+#include <browser_config.h>
+
+#if __STDC_HOSTED__ != 0
+#error "Applications must compile freestanding"
+#endif
 
 extern "C" unsigned __int128 divide_wide(unsigned __int128, unsigned __int128);
-
-#if _LIBCPP_HAS_THREADS || _LIBCPP_HAS_EXCEPTIONS || _LIBCPP_HAS_RTTI
-#error "libc++ must be built without threads, exceptions, and RTTI"
-#endif
-#if defined(__cpp_exceptions) || defined(__cpp_rtti)
-#error "Programs must use the same exception and RTTI settings as the runtime"
-#endif
-
 static volatile int initialized;
-struct Initialize {
-    Initialize() { initialized = initialized + 1; }
-};
-static Initialize initialize;
 static int local_initializations;
+struct Initialize { Initialize() { initialized = initialized + 1; } };
+static Initialize initialize;
 
-static int twice(int value) { return value * 2; }
-
-int main() {
-    if (initialized != 1) return 1;
-    const std::array numbers = {3, 4};
-    char text[64];
-    volatile double argument = 0.5;
-    snprintf(text, sizeof(text), "libc++=%d math=%.3f", twice(std::accumulate(numbers.begin(), numbers.end(), 0)), sin(argument));
-    if (strcmp(text, "libc++=14 math=0.479") != 0) return 2;
-    printf("%s\n", text);
-    browser::print("browser import\n");
-    if (browser::now() != 123.5) return 3;
-    const unsigned __int128 wide = (static_cast<unsigned __int128>(1) << 100) + 42;
-    if (divide_wide(wide, 3) * 3 + wide % 3 != wide) return 4;
-    return 0;
-}
-
-extern "C" BROWSER_EXPORT(cpp_checks) int cpp_checks() {
-    struct Local {
-        std::string text = std::string(80, 's');
-        Local() { ++local_initializations; }
-    };
+extern "C" EXPORT(cpp_checks) int cpp_checks() {
+    // Static local initialization must use single-threaded guards.
+    struct Local { Local() { ++local_initializations; } };
     static Local local;
-    if (local_initializations != 1 || local.text.size() != 80) return 8;
-    std::vector<int> values = {4, 1, 3, 2};
-    std::sort(values.begin(), values.end());
-    if (values.front() != 1 || std::accumulate(values.begin(), values.end(), 0) != 10) return 1;
-    std::unordered_map<std::string, int> counts;
-    const std::string key(80, 'k');
-    counts[key] = 14;
-    if (counts.at(key) != 14) return 2;
-    const auto formatted = std::format("value={} fraction={:.2f}", counts.at(key), 0.5);
-    if (formatted != "value=14 fraction=0.50") return 3;
-    double parsed = 0;
-    const std::string fraction = "0.125";
-    const auto result = std::from_chars(fraction.data(), fraction.data() + fraction.size(), parsed);
-    if (result.ec != std::errc{} || parsed != 0.125) return 4;
-    auto shared = std::make_shared<std::string>(key);
-    auto owned = std::make_unique<int>(7);
-    std::function<int()> callback = [shared, number = *owned, padding = std::array<int, 64>{}] {
-        return number + int(shared->size()) + padding[0];
-    };
-    if (callback() != 87) return 5;
-    struct alignas(64) Aligned { int value = 42; };
-    auto aligned = std::make_unique<Aligned>();
-    if (reinterpret_cast<uintptr_t>(aligned.get()) % alignof(Aligned) != 0 || aligned->value != 42) return 6;
-    std::pmr::unsynchronized_pool_resource pool;
-    std::pmr::vector<int> pooled(&pool);
-    pooled.push_back(9);
-    if (pooled.front() != 9) return 7;
+    if (local_initializations != 1 || initialized != 1) return 1;
+    void *standard = std::malloc(17);
+    if (!standard || uintptr_t(standard) % alignof(std::max_align_t)) return 6;
+    std::free(standard);
+    int *array = new int[8]{};
+    array[7] = 42;
+    if (array[0] || array[7] != 42) return 2;
+    delete[] array;
+    struct alignas(4096) Aligned { int value = 42; };
+    auto *aligned = new Aligned;
+    if (uintptr_t(aligned) % 4096 || aligned->value != 42) return 3;
+    delete aligned;
+    auto *optional = new (std::nothrow) Aligned;
+    if (!optional || uintptr_t(optional) % 4096) return 4;
+    delete optional;
+    alignas(Aligned) unsigned char storage[sizeof(Aligned)];
+    auto *placed = new (storage) Aligned;
+    if (placed->value != 42) return 5;
+    placed->~Aligned();
     return 0;
 }
 
-extern "C" BROWSER_EXPORT(utc_milliseconds) double utc_milliseconds() {
-    return static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count());
+extern "C" EXPORT(heap_checks) int heap_checks() {
+    free(nullptr);
+    void *zero = malloc(0);
+    if (!zero) return 1;
+    free(zero);
+    for (size_t size = 1; size < 257; ++size) {
+        void *ptr = malloc(size);
+        if (!ptr || uintptr_t(ptr) % alignof(max_align_t)) return 2;
+        memset(ptr, 0x5a, size);
+        free(ptr);
+    }
+    const size_t alignments[] = {16, 64, 4096};
+    for (size_t alignment : alignments) {
+        void *ptr = aligned_alloc(alignment, alignment);
+        if (!ptr || uintptr_t(ptr) % alignment) return 3;
+        free(ptr);
+    }
+    if (aligned_alloc(3, 12) || *wasm_errno_location() != WASM_EINVAL) return 4;
+    if (aligned_alloc(64, 65) || *wasm_errno_location() != WASM_EINVAL) return 5;
+    auto *ptr = static_cast<unsigned char *>(calloc(32, 8));
+    if (!ptr) return 6;
+    for (int i = 0; i < 256; ++i) if (ptr[i]) return 7;
+    ptr[0] = 0x2a; ptr[255] = 0x5b;
+    auto *resized = static_cast<unsigned char *>(realloc(ptr, 1024));
+    if (!resized || uintptr_t(resized) % alignof(max_align_t) || resized[0] != 0x2a || resized[255] != 0x5b) return 8;
+    ptr = resized;
+    volatile size_t impossible = SIZE_MAX;
+    if (realloc(ptr, impossible) || *wasm_errno_location() != WASM_ENOMEM || ptr[0] != 0x2a) return 9;
+    resized = static_cast<unsigned char *>(realloc(ptr, 16));
+    if (!resized || resized[0] != 0x2a) return 10;
+    if (realloc(resized, 0)) return 11;
+    ptr = static_cast<unsigned char *>(realloc(nullptr, 32));
+    if (!ptr) return 12;
+    free(ptr);
+    if (calloc(impossible, 2) || *wasm_errno_location() != WASM_ENOMEM) return 13;
+    // Exhaust the pool using large blocks, then verify reuse and live data.
+    void *blocks[128];
+    size_t count = 0;
+    const size_t chunk = BROWSER_HEAP_SIZE / 32;
+    while (count < 128 && (blocks[count] = malloc(chunk))) ++count;
+    if (!count || count == 128 || *wasm_errno_location() != WASM_ENOMEM) return 14;
+    memset(blocks[0], 0x39, chunk);
+    if (realloc(blocks[0], BROWSER_HEAP_SIZE) || static_cast<unsigned char *>(blocks[0])[0] != 0x39) return 15;
+    if (::operator new(BROWSER_HEAP_SIZE, std::nothrow)) return 16;
+    for (size_t i = 0; i < count; ++i) free(blocks[i]);
+    ptr = static_cast<unsigned char *>(malloc(chunk));
+    if (!ptr) return 17;
+    free(ptr);
+    return 0;
 }
 
-extern "C" BROWSER_EXPORT(cpp_allocation_failure) void cpp_allocation_failure() {
-    volatile size_t impossible = BROWSER_HEAP_SIZE;
-    void* volatile allocation = ::operator new(impossible);
+extern "C" EXPORT(memory_checks) int memory_checks() {
+    char text[32];
+    strcpy(text, "abcdef");
+    if (strlen(text) != 6 || strcmp(text, "abcdef") || strncmp(text, "abcxyz", 3)) return 1;
+    memmove(text + 1, text, 7);
+    if (strcmp(text, "aabcdef")) return 2;
+    memmove(text, text + 1, 7);
+    if (strcmp(text, "abcdef")) return 3;
+    char copy[32];
+    memcpy(copy, text, 7);
+    if (memcmp(copy, text, 7)) return 4;
+    return 0;
+}
+extern "C" EXPORT(cpp_allocation_failure) void cpp_allocation_failure() {
+    volatile size_t impossible = SIZE_MAX;
+    void *volatile allocation = ::operator new(impossible);
     ::operator delete(allocation);
 }
-
-extern "C" BROWSER_EXPORT(heap_checks) int heap_checks() {
-    if (initialized != 1) return 7;
-    constexpr size_t allocation_size = BROWSER_HEAP_SIZE < 800000 ? BROWSER_HEAP_SIZE / 4 : 200000;
-    auto* memory = static_cast<unsigned char*>(malloc(allocation_size));
-    if (!memory) return 1;
-    memset(memory, 0x5a, allocation_size);
-    volatile unsigned char* touched = memory;
-    if (touched[0] != 0x5a || touched[allocation_size - 1] != 0x5a) return 2;
-    free(memory);
-    memory = static_cast<unsigned char*>(malloc(allocation_size));
-    if (!memory) return 3;
-    touched = memory;
-    touched[0] = 0x4b;
-    // The LLVM bare-metal allocator is bounded and must keep live blocks
-    // intact when another allocation exceeds its configured region.
-    volatile size_t impossible = BROWSER_HEAP_SIZE;
-    void* volatile exhausted = malloc(impossible);
-    if (exhausted != nullptr) return 4;
-    void* volatile nothrow_allocation = ::operator new(impossible, std::nothrow);
-    if (nothrow_allocation != nullptr) return 10;
-    if (touched[0] != 0x4b) return 5;
-    free(memory);
-    auto* cleared = static_cast<unsigned char*>(calloc(32, 8));
-    if (!cleared) return 6;
-    volatile unsigned char* cleared_bytes = cleared;
-    if (cleared_bytes[0] != 0 || cleared_bytes[255] != 0) return 6;
-    cleared[0] = 0x2a;
-    auto* resized = static_cast<unsigned char*>(realloc(cleared, 1024));
-    if (!resized || resized[0] != 0x2a) return 8;
-    free(resized);
-    errno = EDOM;
-    if (*__llvm_libc_errno() != EDOM) return 9;
-    return 0;
+extern "C" EXPORT(heap_failure_checks) int heap_failure_checks() {
+    *wasm_errno_location() = 0;
+    void *volatile allocation = malloc(8);
+    return allocation != nullptr || *wasm_errno_location() != WASM_ENOMEM;
 }
+extern "C" EXPORT(constructor_count) int constructor_count() { return initialized; }
 
-extern "C" BROWSER_EXPORT(heap_failure_checks) int heap_failure_checks() {
-    errno = 0;
-    void* volatile allocation = malloc(8);
-    if (allocation != nullptr || errno != ENOMEM) return 1;
+extern "C" EXPORT(runtime_checks) int runtime_checks() {
+    if (initialized != 1) return 1;
+    const unsigned __int128 wide = (static_cast<unsigned __int128>(1) << 100) + 42;
+    if (divide_wide(wide, 3) * 3 + wide % 3 != wide) return 2;
+    int result = memory_checks();
+    if (result) return 200 + result;
+    if (browser::now() != 123.5 || js_time() != 1234567890123.0) return 3;
+    puts("TLSF runtime OK");
     return 0;
 }

@@ -5,8 +5,7 @@
 #error "browser.hpp requires a wasm32 target"
 #endif
 
-#include <stddef.h>
-#include <stdint.h>
+#include <wasm.hpp>
 #include <browser_config.h>
 
 // Implement these named imports in the WebAssembly.Instance import object.
@@ -17,13 +16,10 @@ void js_print_char(int character);
 __attribute__((import_module("env"), import_name("js_now")))
 double js_now(void);
 
-// Unix-epoch milliseconds, used by LLVM libc and std::chrono::system_clock.
+// Unix-epoch milliseconds supplied by the host.
 __attribute__((import_module("env"), import_name("js_time")))
 double js_time(void);
 
-// Link -lbrowser and export browser_run. It initializes C++ static objects
-// once; call it before other program exports. Use a new instance for a fresh run.
-int browser_run(void);
 }
 
 #define BROWSER_EXPORT(name) __attribute__((export_name(#name)))

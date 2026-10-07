@@ -2,253 +2,218 @@
 
 `npm run build -- --llvm-version 23.1.2` builds browser-hosted Clang and LLD
 and produces `dist/clang.{js,wasm}`, `dist/lld.{js,wasm}`, and `dist/sysroot.tgz`.
-Clang is a custom C++ compiler launcher with fixed Wasm defaults, header search
-directories, optional JSON AST dumps, and an output directory.
-Emscripten builds the compiler tools; programs compiled with the packaged
-sysroot use LLVM libc, libc++, and libc++abi with explicit browser imports.
-Clang's default C++ standard library is libc++.
+Emscripten builds the tools. Compiled applications use TLSF, compiler-rt Wasm
+builtins, and the small runtime exposed by `wasm.hpp`. The sysroot does not
+include libc, libc++, libc++abi, or their standard-library headers.
 
-The compiler launcher in `cmake/wasm-clang` links Clang's driver, frontend, and
-code generator through `LLVM_EXTERNAL_PROJECTS`, without changing LLVM's
-sources. The pipeline builds `wasm-clang` and packages its outputs from
-`build-wasm/bin/custom-clang` as `dist/clang.{js,wasm}`.
+The custom compiler in `cmake/wasm-clang` links Clang's driver, frontend, and
+code generator through `LLVM_EXTERNAL_PROJECTS`. The linker in `cmake/wasm-lld`
+includes only LLD's WebAssembly driver. Neither requires LLVM source patches.
+Their build outputs live in `build-wasm/bin/custom-clang` and
+`build-wasm/bin/wasm-only` respectively, and are packaged into `dist`.
 
-The browser linker contains only LLD's WebAssembly driver. A launcher in
-`cmake/wasm-lld` is registered through `LLVM_EXTERNAL_PROJECTS` and links
-`lldWasm` and `lldCommon`, without changing LLVM's sources. The pipeline builds
-the `wasm-lld` target instead of LLVM's multi-format `lld` executable, leaving
-the ELF, COFF, Mach-O, and MinGW driver libraries out of this build. Its outputs
-in `build-wasm/bin/wasm-only` are packaged as `dist/lld.{js,wasm}`. Wasm is the
-default flavor; `-flavor wasm` is also accepted.
+The build host needs Node.js 24+, Git, CMake 3.24+, Ninja, Python 3 with PyYAML,
+and Clang/LLVM tools with the WebAssembly backend. The pipeline downloads host
+LLVM, LLVM sources, and Emscripten when needed. TLSF is vendored at a pinned
+revision in `sysroot/tlsf`; its BSD license is packaged with each sysroot.
 
-The build host needs Node.js 24+, Git, CMake 3.24+, Ninja, Python 3 with PyYAML, and
-Clang/LLVM tools with the WebAssembly backend. The pipeline downloads host
-LLVM, LLVM sources, and Emscripten when needed. CMake builds LLVM libc,
-libc++, libc++abi, and compiler-rt builtins from the same selected LLVM source
-release. JavaScript coordinates those dependency builds, compiles the browser
-runtime, and packages the complete sysroot.
+## Browser compiler
 
-## Browser compiler options
-
-Mount the packaged sysroot at `/sysroot` and source files at `/work` in the
-Emscripten filesystem, then call the module once with:
+Mount the sysroot at `/sysroot` and sources at `/work` in the Emscripten
+filesystem, then call:
 
 ```js
 compiler.callMain([
   "-I", "/work/include",
-  "--include-dir", "/dependencies/include",
-  "-dump",
-  "--output-dir", "/work/build",
+  "-I", "/dependencies/include",
+  "-o", "/work/build",
   "/work/main.cpp", "/work/helpers.cpp",
 ]);
 ```
 
-`-I<dir>`, `-I <dir>`, and `--include-dir <dir>` add header search directories
-in the specified order; repeat them as needed. `--output-dir <dir>` (or `-o <dir>`)
-creates the output directory, which defaults to the current working directory.
-`--include-dir=<dir>` and `--output-dir=<dir>` are also accepted.
-Each input produces `<stem>.o`. With `-dump`, the first pass writes
-`<stem>.json` for every source; only after all dumps succeed does the second
-pass generate objects. Read these files through `compiler.FS.readFile`.
-Each JSON dump contains a `TranslationUnitDecl` with declarations from that
-input source file. Included header declarations and builtins are omitted;
-headers are still parsed normally for compilation. Source declarations retain
-their bodies, types, comments, and references to header declarations, including
-default argument expressions. Macro-generated declarations are selected by
-their expansion location; `#line` directives do not change file selection.
-Diagnostics go to stderr. A failed pass returns a nonzero status; compilation
-errors remove partial outputs from that pass. Sources with the same output
-stem are rejected before any output is written.
+`-I<dir>` and `-I <dir>` add
+header search paths in the specified order. `-o <dir>` creates an output
+directory, defaulting to the current working directory. Each input always
+produces `<stem>.json` and `<stem>.o`. `-dump` and `--output-dir` are removed.
 
-All inputs are compiled as C++. Compilation to objects is implicit; linking
-is performed separately with LLD. The launcher accepts only the options above,
-`--help`, `--version`, and `--` before source paths starting with a dash.
-The following compiler options are built in:
+Compilation has three phases, completing each for every input before starting
+the next. Each phase calls Clang's frontend once with the full input list;
+Clang processes the inputs sequentially:
+
+1. Precompile each source's initial header preamble into an in-memory PCH.
+2. Emit JSON using that PCH and Clang's built-in JSON AST dumper.
+3. Compile Wasm objects using the same PCH.
+
+Per-input frontend callbacks select each source's PCH and output path. PCHs
+remain in memory, and macros and declarations are isolated between source
+files. No per-source compiler execution loop is used by the launcher.
+
+Clang's preamble scanner preserves initial includes, macros, conditional
+preprocessing, and header search relative to the original source path.
+Source declarations are not compiled in the first phase. No custom AST
+filtering is applied: the normal dumper avoids eagerly deserializing PCH
+headers. Declarations loaded on demand can appear, and includes after the first
+source declaration are parsed and dumped normally. Put headers at the beginning
+of the source to benefit from precompilation. Bodies, types, comments, macros,
+and default arguments follow Clang's normal JSON semantics.
+
+Read outputs with `compiler.FS.readFile`. Diagnostics go to stderr. Failure
+returns a nonzero status and removes partial outputs for the failing pass;
+completed earlier outputs remain. Output-stem collisions and overwriting input
+files are rejected before writing outputs. The launcher also accepts `--help`,
+`--version`, and `--` before source paths starting with a dash.
+
+All inputs compile as C++ with these defaults; linking is separate:
 
 ```text
 --target=wasm32-unknown-unknown --sysroot=/sysroot
--stdlib=libc++ -fvisibility=default -resource-dir /sysroot/lib/clang/23
+-ffreestanding -nostdinc++ -fvisibility=default
+-resource-dir /sysroot/lib/clang/23
 -fno-exceptions -fno-rtti -fno-threadsafe-statics -std=c++23 -O2
 -fno-color-diagnostics -fmessage-length=0 -ferror-limit=0
 -fparse-all-comments -I/work
 ```
 
-The resource path is fixed to Clang 23, so use the LLVM 23 build and matching
-sysroot. During the dump pass, the launcher also supplies
-`-fsyntax-only -Xclang -ast-dump=json`; `-Xclang` must precede a frontend option.
+The resource path is fixed to Clang 23; use matching LLVM sources and sysroot.
 
-## Build only the sysroot
-
-For WAMR's host-managed app heap, use the separate build:
-
-```sh
-npm run build-wamr-sysroot -- --jobs 4
-# Validate C++23 and PMR under a native WAMR interpreter:
-npm run build-wamr-sysroot -- --test --wamr-dir /path/to/wasm-micro-runtime
-```
-
-This produces `dist/wamrsr.tgz` (extracts to `wamrsr/`) and keeps the installed
-sysroot at `dist/wamrsr/`. It includes the WAMR host adapter and embedding
-instructions in `share/wamr/`; the source instructions are in
-[sysroot/wamr/README.md](sysroot/wamr/README.md). Link `-lwamr`, register the host
-adapter, and instantiate with a nonzero app heap. C/C++ allocations, including
-alignment and default PMR resources, use that heap. Heap capacity is a host
-setting. Browser and WAMR sysroots use separate build and output directories.
-The GitHub Actions release workflow builds both sysroots, validates the WAMR
-archive with a pinned native WAMR interpreter, and publishes `wamrsr.tgz`
-alongside `sysroot.tgz` and the compiler/linker binaries.
-
-For the browser sysroot:
+## Sysroot and runtime
 
 ```sh
 npm run build-sysroot -- --llvm-version 23.1.2 --jobs 4 --test
-# Test an existing sysroot without rebuilding:
 npm run test-sysroot
 ```
 
-`--dist-dir` defaults to `dist`. Both `sysroot/` and `sysroot.tgz`
-remain there after building. The archive extracts to a top-level `sysroot/`
-directory, suitable for mounting at `/sysroot` in the compiler's filesystem.
+The archive extracts to `sysroot/`; the installed directory also remains in
+`dist/sysroot`. Use `--host-llvm-dir` or `HOST_LLVM_DIR` to choose host LLVM,
+and `--llvm-dir` or `LLVM_DIR` to choose sources. Dependency builds remain
+in `out/build-sysroot`.
 
-Use `--host-llvm-dir` (or `HOST_LLVM_DIR`) to select host LLVM tools.
-Clang resource headers come from the selected LLVM source release through
-`install-core-resource-headers` and `install-webassembly-resource-headers`.
-`--llvm-dir` (or `LLVM_DIR`) defaults to `out/llvm-project`;
-when missing, JavaScript downloads the release selected by `--llvm-version`
-or `LLVM_VERSION` (default 23.1.2 for the standalone sysroot command).
-Dependency build files remain in `out/build-sysroot`. CMake is required for
-LLVM's internal builds; this repository has no root `CMakeLists.txt`.
-The source tree receives idempotent adaptations for LLVM libc's Wasm
-configuration and libc++abi's no-RTTI source selection during the build.
+Each build starts with an empty stage, installs Clang's core and WebAssembly
+resource headers and compiler-rt builtins, then adds the project runtime.
+Non-Wasm resource headers are excluded using LLVM's install targets.
+The libraries are:
 
-The sysroot includes C headers, C++ headers in `include/c++/v1` (including
-the generated `__config_site` and ABI headers), `browser.hpp`, `libc.a`,
-`libm.a`, `libc++.a`, `libc++abi.a`, `libc++experimental.a`, `libbrowser.a`,
-compiler-rt builtins, core and WebAssembly Clang resource headers, and the
-LLVM license. LLVM libc's public headers
-include the matching `llvm-libc-types` and `llvm-libc-macros` directories.
-Each build starts with an empty sysroot and installs the selected LLVM components
-straight into it. Packaging adds the browser runtime and license metadata, then
-archives the whole directory without filename lists or copy filters.
-LLVM's install layout is preserved: libc and libm live in
-`lib/wasm32-unknown-unknown`, C++ libraries in `lib`, and compiler-rt builtins
-in `lib/clang/<major>/lib/wasi`. The `cxx` component also installs its Wasm
-`libc++experimental.a`. Default MinSizeRel builds emit no debug information;
-packaging does not scan or strip the installed archives.
-CUDA, HIP, OpenCL, HLSL, and other architectures' resource headers are excluded
-using LLVM's install targets. The compiler-rt build installs only
-`install-clang_rt.builtins-wasm32`; libc, libc++, and libc++abi are also built
-for `wasm32-unknown-unknown`. Header selection requires no LLVM source patches
-and runs before the Clang and LLD builds.
+| Library | Purpose |
+| --- | --- |
+| `lib/libwasm.a` | Allocation wrappers, memory/string functions, C++ new/delete, minimal ABI hooks, constructor initialization |
+| `lib/libtlsf.a` | TLSF pool allocator |
+| `lib/libbrowser.a` | Console output |
+| `lib/clang/<major>/lib/wasi/libclang_rt.builtins-wasm32.a` | Compiler arithmetic plus the integrated TLSF/allocation/memory/C++ runtime |
 
-This Wasm port selects LLVM libc's portable bare-metal implementations,
-single-threaded stdio, external `errno` storage, and no TLS. Floating-point
-formatting and parsing are enabled. Wasm supports round-to-nearest and does
-not expose hardware floating-point exception flags. `setjmp`/`longjmp` and
-POSIX file operations are not provided; the generated C headers describe the
-selected entrypoints.
+The builtins archive includes the objects from `libwasm.a` and `libtlsf.a`,
+so linking the default compiler-rt runtime supplies both arithmetic and
+allocation support. The split archives remain available for explicit links.
+`wasm.hpp` includes `wasm.h` and provides ordinary, array, sized, aligned,
+nothrow, and placement new/delete, plus `std::size_t`, `std::ptrdiff_t`,
+`std::nullptr_t`, `std::nothrow`, and `std::align_val_t`.
+`wasm.h` exposes `malloc`, `free`, `calloc`, `realloc`, `aligned_alloc`,
+`memcpy`, `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strncmp`,
+`strcpy`, `putchar`, `puts`, `abort`, and `exit`. This is a small freestanding
+API; containers, formatting, math functions, and the full C/C++ libraries are
+not supplied. Include `wasm.hpp` instead of `<new>` or libc headers.
 
-libc++ and libc++abi are static Wasm libraries compiled without threads,
-RTTI, exceptions, or an unwinder. Containers, algorithms, strings, smart
-pointers, `std::function`, `std::format`, `charconv`, and PMR use LLVM libc's
-allocator. Single-threaded guards support dynamically initialized static
-locals. Filesystem access, localization (including iostreams and regex),
-wide characters, `std::random_device`, time-zone databases, and
-`std::chrono::steady_clock` are disabled. Use `printf` or the browser helpers
-for output and `browser::now()` for monotonic timestamps.
+`--heap-size` or `SYSROOT_HEAP_SIZE` configures a bounded TLSF heap, defaulting
+to 4194304 bytes. The runtime reserves it on the first allocation using
+`memory.grow` after `__heap_base`. Host memory limits must allow this region
+plus the stack and static data. Freeing blocks allows reuse; the heap does not
+shrink. The allocator and runtime are single-threaded.
 
-`--heap-size` (or `SYSROOT_HEAP_SIZE`) sets the bounded LLVM allocator region in bytes (default
-4194304, or 4 MiB). On the first allocation, the runtime grows linear memory
-as needed to reserve this region. Exhaustion returns null; freeing blocks
-makes them reusable. Set a smaller heap for applications with lower memory
-limits. Host memory limits must allow the heap plus the stack and static data.
-LLVM libc's allocator does not use `sbrk`, and this sysroot does not provide it.
+Allocation failure returns null and sets `*wasm_errno_location()` to
+`WASM_ENOMEM`; invalid `aligned_alloc` arguments set `WASM_EINVAL`.
+`calloc` checks multiplication overflow. Failed `realloc` preserves the old
+block; `realloc(ptr, 0)` frees it. Allocations have `max_align_t` alignment.
+Ordinary `new` traps on failure; nothrow `new` returns null. `abort` and `exit`
+trap. Returning from application exports does not run process teardown or static destructors.
 
-## Compile and run a program
-
-For a native Clang invocation against the extracted sysroot:
+## Compile and run
 
 ```sh
-clang++ --target=wasm32-unknown-unknown -std=c++20 -O2 \
-  -fno-exceptions -fno-rtti -stdlib=libc++ -nostdlib \
-  --sysroot=dist/sysroot \
+clang++ --target=wasm32-unknown-unknown -std=c++23 -O2 \
+  -ffreestanding -nostdinc++ -fno-exceptions -fno-rtti -fno-threadsafe-statics \
+  -nostdlib --sysroot=dist/sysroot \
+  -resource-dir=dist/sysroot/lib/clang/23 \
   examples/browser.cpp -Ldist/sysroot/lib \
-  -Ldist/sysroot/lib/wasm32-unknown-unknown \
   -Ldist/sysroot/lib/clang/23/lib/wasi \
-  -lbrowser -lc++ -lc++abi -lc -lm -lclang_rt.builtins-wasm32 \
-  -Wl,--no-entry -Wl,--export=browser_run -Wl,--export-memory \
+  -lbrowser -lclang_rt.builtins-wasm32 \
+  -Wl,--no-entry -Wl,--export=wasm_initialize -Wl,--export-memory \
   -o examples/program.wasm
 ```
 
-Replace `23` in the resource-library path with the selected LLVM major version.
-For browser-hosted Clang, use the custom invocation above to produce objects
-with the built-in flags, then pass the objects to browser-hosted LLD with:
+For browser-hosted LLD, pass the custom compiler's objects with:
 
 ```text
---no-entry --export=browser_run --export-memory program.o
--L/sysroot/lib -L/sysroot/lib/wasm32-unknown-unknown
--L/sysroot/lib/clang/23/lib/wasi
--lbrowser -lc++ -lc++abi -lc -lm -lclang_rt.builtins-wasm32 -o program.wasm
+--no-entry --export=wasm_initialize --export-memory browser.o
+-L/sysroot/lib -lbrowser -o program.wasm
 ```
 
-Serve `examples/` over HTTP and open `browser.html`. The page provides
-`env.js_print_char`, `env.js_now`, and `env.js_time`, instantiates the module, and calls
-`browser_run()`, which returns `main`'s result. Both `main()` and
-`main(int, char**)` are supported; the latter receives zero arguments and
-a null-terminated empty argument array. `browser_run()` initializes C++ static
-objects once before calling `main`; call it before other program exports.
-Create a new instance for each fresh execution;
-returning from `main` does not invoke process teardown or static destructors.
-Calling `exit` or failing an assertion traps the module.
+The custom LLD links `libclang_rt.builtins-wasm32.a` by default, searching
+`/sysroot/lib/clang/23/lib/wasi` after user-provided `-L` paths. Mount the
+sysroot in the linker's filesystem as well as the compiler's. This supplies
+compiler builtins, TLSF, new/delete, and constructor initialization; console
+support still uses `-lbrowser` explicitly.
 
-`browser::print` and `browser::write` send bytes to `js_print_char`.
-`printf`, `puts`, and standard output use the same import. Standard input
-returns EOF. `browser::now()` calls `js_now`, normally backed by
-`performance.now()`. Unused imports are omitted by the linker.
-`BROWSER_EXPORT(name)` exports additional C-linkage functions.
-`std::chrono::system_clock::now()` uses `env.js_time`, backed by `Date.now()`
-and expressed in Unix-epoch milliseconds. This is separate from the
-monotonic browser timer.
+Replace `23` with the LLVM major used for a native build. Compile applications
+with the exception, RTTI, and static-guard flags above. Native Clang's
+`-nostdlib` disables implicit libraries and startup files; the command above
+links compiler-rt explicitly. The custom compiler emits objects only, and the
+custom LLD adds compiler-rt without adding libc or libc++, so no extra library
+suppression flags are needed. `-ffreestanding`
+is the custom compiler default: `__STDC_HOSTED__` is `0`, builtin assumptions
+and unwind tables are disabled by default, and `main` is an ordinary function.
+Export application functions for the host to call:
 
-Compile application code with `-fno-exceptions -fno-rtti` to match the runtime.
-`-stdlib=libc++` selects the packaged C++ headers automatically; do not use
-`-nostdinc++` unless you also supply `-isystem /sysroot/include/c++/v1`.
-`-nostdlib` leaves linking explicit for this bare Wasm reactor, so both C++
-archives must be included as shown above.
+```cpp
+#include <wasm.hpp>
 
-No permissive undefined-symbol linker flag is needed: missing dependencies
-fail at link time. Heap reservation uses `memory.grow`; failed reservation sets `errno` to
-`ENOMEM`. Allocation failure within the bounded LLVM heap returns null; the
-bare-metal allocator does not guarantee an `errno` update for exhaustion.
-Ordinary `new` and C++ operations that would throw terminate by trapping;
-`new (std::nothrow)` returns null on allocation failure.
+extern "C" __attribute__((export_name("compute"))) int compute(int value) {
+    return value * 2;
+}
+```
+
+The runtime exports `void wasm_initialize()`, declared by `wasm.h` and available
+through `wasm.hpp`. It initializes C++ static constructors once per module
+instance. It has no application entry function and does not call application
+exports. Link with `--no-entry --export=wasm_initialize` to include the initializer
+from the runtime archive. No browser imports are needed for initialization.
+
+The host initializes the instance, then calls whichever application exports it
+needs:
+
+```js
+instance.exports.wasm_initialize();
+const result = instance.exports.compute(21);
+```
+
+Repeated calls to `wasm_initialize()` do nothing after the first call. Create
+a new instance for a fresh initialization. Serialize calls into each instance;
+the runtime is single-threaded.
+
+Serve `examples/` over HTTP and open `browser.html`. The page supplies
+`env.js_print_char`, `env.js_now`, and `env.js_time`, initializes constructors,
+and calls the example's `run_demo()` export.
+
+`browser.hpp` includes `wasm.hpp`. `browser::print` and `browser::write` send
+bytes to `js_print_char`, as do `puts` and `putchar`. `browser::now()` uses
+`js_now` for monotonic milliseconds; `js_time()` uses Unix-epoch milliseconds.
+Unused imports are omitted by the linker. `BROWSER_EXPORT(name)` exposes other
+C-linkage functions.
 
 ## Validation
 
-`npm test` checks the build pipeline. `npm run test-sysroot` compiles a C++20
-program and instantiates it using Node's WebAssembly engine, exercising
-containers, strings, formatting, smart pointers, aligned allocation, PMR,
-ABI guards, UTC clocks, stdio, floating-point math, compiler builtins, static
-constructors, and heap reservation, exhaustion, `calloc`, and `realloc`.
-It also checks trapping `new` and non-throwing allocation. A restricted-memory instance
-checks that failed heap reservation returns null with `ENOMEM`. Tests compile
-against the extracted archive and check the explicit browser imports.
+`npm test` checks the build pipeline and packaging. `npm run test-sysroot`
+compiles against the extracted archive and runs with Node's WebAssembly engine.
+It checks compiler-rt arithmetic, constructors, new/delete variants, memory and
+string functions, alignment, pool exhaustion/reuse, overflow, failed realloc,
+trapping new, failed memory growth with retry, and the freestanding application
+exports with explicit, one-time constructor initialization.
 
-`npm run test-clang` tests the packaged custom compiler in a Node worker with
-the matching sysroot. It checks header search paths, C++23/Wasm defaults,
-JSON ASTs and comments, multi-source object generation, AST-before-object
-failure behavior, output directories, and invalid options. An optional first
-argument selects an unpackaged module directory and a second selects a sysroot:
-`npm run test-clang -- out/llvm-project/build-wasm/bin/custom-clang dist/sysroot`.
+`npm run test-clang` tests header search, C++23/Wasm defaults, PCH-based JSON,
+comments, macros, multi-source compilation, phase ordering, output collisions,
+and invalid options. To test an unpackaged build:
 
-`npm run test-lld` tests the packaged browser linker using Node workers and
-the host Clang in `out/llvm` (or `HOST_LLVM_DIR`). It links Wasm objects and
-LLVM bitcode, executes the resulting export, and checks that other linker
-flavors and ELF, COFF, and Mach-O inputs are rejected. To test an unpackaged
-build, pass its output directory, for example:
-`npm run test-lld -- out/llvm-project/build-wasm/bin/wasm-only`.
+```sh
+npm run test-clang -- out/llvm-project/build-wasm/bin/custom-clang dist/sysroot
+npm run test-lld -- out/llvm-project/build-wasm/bin/wasm-only
+```
 
-The Wasm adaptation uses LLVM libc's [full-build configuration](https://libc.llvm.org/build_concepts.html)
-and its [bare-metal I/O hooks](https://github.com/llvm/llvm-project/blob/main/libc/src/__support/OSUtil/baremetal/io.h).
-The C++ runtime follows LLVM's [vendor configuration](https://libcxx.llvm.org/VendorDocumentation.html)
-with the bare-metal options selected in `src/steps/build-sysroot.js`.
+TLSF upstream: [mattconte/tlsf](https://github.com/mattconte/tlsf).

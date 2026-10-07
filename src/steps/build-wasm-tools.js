@@ -83,7 +83,7 @@ export function buildWasmBinaries(config) {
       -DCLANG_TOOL_SCAN_BUILD_PY_BUILD=OFF
       -DCLANG_TOOL_SCAN_VIEW_BUILD=OFF
       -DDEFAULT_SYSROOT="/sysroot"
-      -DCLANG_DEFAULT_CXX_STDLIB="libc++"
+      -DCLANG_DEFAULT_CXX_STDLIB=""
       -DCLANG_DEFAULT_RTLIB="compiler-rt"
       -DCLANG_DEFAULT_LINKER="lld"
       -DCMAKE_CXX_FLAGS="${config.cxxFlags}"
