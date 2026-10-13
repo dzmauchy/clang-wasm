@@ -8,6 +8,7 @@ import {
   resolvePreferredEmsdkDir,
   resolvePreferredHostLlvmDir,
 } from "./utils/fs.js";
+import { resolveTarget, targetDirSuffix } from "./targets/index.js";
 
 export const CXX_FLAGS = cleanFlags(`
   -Oz
@@ -129,15 +130,20 @@ export function resolveBuildConfig(options = {}) {
     llvmDir = resolvePreferredLlvmDir(rootDir);
   }
 
+  const target = typeof options.target === "object" ? options.target : resolveTarget(options.target);
+  const dirSuffix = targetDirSuffix(target);
+
   const distDir = path.resolve(
-    options.distDir || process.env.DIST_DIR || path.join(rootDir, "dist")
+    options.distDir ||
+      process.env.DIST_DIR ||
+      path.join(rootDir, "dist", ...(dirSuffix ? [target.id] : []))
   );
   const stageDir = path.join(distDir, "sysroot");
-  const buildNativeDir = path.join(llvmDir, "build-native");
-  const buildWasmDir = path.join(llvmDir, "build-wasm");
+  const buildNativeDir = path.join(llvmDir, `build-native${dirSuffix}`);
+  const buildWasmDir = path.join(llvmDir, `build-wasm${dirSuffix}`);
   const nativeBinDir = path.join(buildNativeDir, "bin");
   const wasmBinDir = path.join(buildWasmDir, "bin");
-  const buildSysrootDir = path.join(rootDir, "out", "build-sysroot");
+  const buildSysrootDir = path.join(rootDir, "out", `build-sysroot${dirSuffix}`);
 
   const hostLlvmDir = path.resolve(
     options.hostLlvmDir ||
@@ -183,6 +189,7 @@ export function resolveBuildConfig(options = {}) {
   }
 
   return {
+    target,
     rootDir,
     llvmDir,
     distDir,

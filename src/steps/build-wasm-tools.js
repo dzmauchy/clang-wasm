@@ -5,11 +5,12 @@ const wasmLldSourceDir = fileURLToPath(new URL("../../cmake/wasm-lld/", import.m
 const wasmClangSourceDir = fileURLToPath(new URL("../../cmake/wasm-clang/", import.meta.url));
 
 export function buildWasmBinaries(config) {
-  console.log("\n--- Cross-Compiling Clang & LLD to Wasm ---");
+  const { target } = config;
+  console.log(`\n--- Cross-Compiling Clang & LLD to Wasm (${target.id}: ${target.triple}) ---`);
 
   run(
     `
-    emcmake cmake -G Ninja -B build-wasm -S llvm
+    emcmake cmake -G Ninja -B ${shellQuote(config.buildWasmDir)} -S llvm
       -DCMAKE_BUILD_TYPE=MinSizeRel
       -DCMAKE_C_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
       -DCMAKE_CXX_FLAGS_MINSIZEREL="-Oz -DNDEBUG"
@@ -18,9 +19,13 @@ export function buildWasmBinaries(config) {
       -DLLVM_EXTERNAL_PROJECTS="wasm-clang;wasm-lld"
       -DLLVM_EXTERNAL_WASM_CLANG_SOURCE_DIR=${shellQuote(wasmClangSourceDir)}
       -DLLVM_EXTERNAL_WASM_LLD_SOURCE_DIR=${shellQuote(wasmLldSourceDir)}
+      -DBROWSER_TARGET_TRIPLE="${target.triple}"
+      -DBROWSER_TARGET_ARGS="${target.clangArgs.join(";")}"
+      -DBROWSER_LLD_FLAVOR="${target.lldFlavor}"
+      -DBROWSER_LLD_ARGS="${target.lldArgs.join(";")}"
       -DLLD_BUILD_TOOLS=OFF
-      -DLLVM_TARGETS_TO_BUILD="WebAssembly"
-      -DLLVM_DEFAULT_TARGET_TRIPLE="wasm32-unknown-unknown"
+      -DLLVM_TARGETS_TO_BUILD="${target.llvmTarget}"
+      -DLLVM_DEFAULT_TARGET_TRIPLE="${target.triple}"
       -DLLVM_NATIVE_TOOL_DIR="${config.nativeBinDir}"
       -DLLVM_ENABLE_THREADS=OFF
       -DLLVM_ENABLE_BACKTRACES=OFF
@@ -97,7 +102,7 @@ export function buildWasmBinaries(config) {
 
   run(
     `
-    ninja -C build-wasm -j ${config.ninjaJobs}
+    ninja -C ${shellQuote(config.buildWasmDir)} -j ${config.ninjaJobs}
       wasm-clang
       wasm-lld
     `,

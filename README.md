@@ -17,6 +17,35 @@ and Clang/LLVM tools with the WebAssembly backend. The pipeline downloads host
 LLVM, LLVM sources, and Emscripten when needed. TLSF is vendored at a pinned
 revision in `sysroot/tlsf`; its BSD license is packaged with each sysroot.
 
+## Targets
+
+Everything target-specific lives in a descriptor under `src/targets/`
+(triple, LLVM backend, LLD flavor, launcher flags, sysroot headers/builtins).
+The pipeline, CMake launchers (`cmake/wasm-clang`, `cmake/wasm-lld`, configured
+through `cmake/browser-target.cmake`), and the reusable workflow
+`.github/workflows/build-target.yml` are shared.
+
+| Target id | Triple | LLD | Release tag | Output |
+| --- | --- | --- | --- | --- |
+| `wasm32` (default) | `wasm32-unknown-unknown` | wasm | `clang-<version>` | `dist/` |
+| `arm8` | `thumbv8m.main-none-eabihf` | ELF | `clang-<version>-arm8` | `dist/arm8/` |
+
+```sh
+npm run build -- --target arm8 --llvm-version 23.1.2   # or: npm run build-arm8
+npm run test-arm8
+npm run test-sysroot -- --target arm8
+```
+
+Running the `clang-lld-arm8` workflow (`llvm-arm8.yml`) builds and publishes
+`clang.{js,wasm}`, `lld.{js,wasm}`, and `sysroot.tgz` (Clang resource headers
+plus compiler-rt builtins) under `clang-<version>-arm8`. The `arm8` toolchain
+has no project runtime; link with the default builtins from
+`/sysroot/lib/clang/23/lib/baremetal`.
+
+To add a target: create `src/targets/<id>.js`, register it in
+`src/targets/index.js`, add a smoke test, and add a workflow calling
+`build-target.yml` with the new id and tag pattern.
+
 ## Browser compiler
 
 Mount the sysroot at `/sysroot` and sources at `/work` in the Emscripten

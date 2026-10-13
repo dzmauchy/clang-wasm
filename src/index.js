@@ -12,11 +12,13 @@ import { buildNativeTableGen } from "./steps/build-native-tools.js";
 import { buildWasmBinaries } from "./steps/build-wasm-tools.js";
 import { optimizeWasmBinaries } from "./steps/optimize-binaries.js";
 import { verifyArtifacts } from "./steps/verify-artifacts.js";
+import { TARGETS, DEFAULT_TARGET_ID, resolveTarget } from "./targets/index.js";
 
 export async function main(args = process.argv.slice(2)) {
   const { values } = parseArgs({
     args,
     options: {
+      target: { type: "string" },
       "llvm-dir": { type: "string" },
       "llvm-tag": { type: "string" },
       "llvm-version": { type: "string" },
@@ -40,6 +42,7 @@ Usage:
   node src/index.js [options]
 
 Options:
+  --target <id>             Target to build: ${Object.keys(TARGETS).join(", ")} (defaults to TARGET env or ${DEFAULT_TARGET_ID})
   --llvm-dir <path>         Path to the LLVM repository root (defaults to ./out/llvm-project)
   --llvm-tag <tag>          LLVM git tag to fetch if missing (defaults to llvmorg-<llvm-version>)
   --llvm-version <ver>      LLVM version for host binaries and source tag (defaults to LLVM_VERSION env)
@@ -62,11 +65,12 @@ Options:
   }
   process.env.LLVM_VERSION = llvmVersion;
   const llvmTag = values["llvm-tag"] || `llvmorg-${llvmVersion}`;
+  const target = resolveTarget(values.target);
 
   // Ensure out directory exists (preserves symlinks/existing dirs)
   ensureOutDir(rootDir);
 
-  console.log("=== LLVM WebAssembly Toolchain Builder ===");
+  console.log(`=== LLVM WebAssembly Toolchain Builder (target: ${target.id}, ${target.triple}) ===`);
 
   // 1. Ensure EMSDK for building the browser-hosted compiler and linker.
   const emsdkDir = ensureEmsdk(rootDir, {
@@ -96,6 +100,7 @@ Options:
 
   const ninjaJobs = values.jobs ? parseInt(values.jobs, 10) : undefined;
   const config = resolveBuildConfig({
+    target,
     rootDir,
     llvmDir,
     distDir: values["dist-dir"],
@@ -110,6 +115,7 @@ Options:
     emsdkVersion: values["emsdk-version"],
   });
 
+  console.log(`Target:           ${config.target.id} (${config.target.triple})`);
   console.log(`LLVM source dir:  ${config.llvmDir}`);
   console.log(`Host LLVM dir:    ${config.hostLlvmDir}`);
   console.log(`Host clang++:     ${config.hostClangXXPath}`);

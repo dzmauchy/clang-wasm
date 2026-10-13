@@ -16,7 +16,7 @@ function fixture(rootDir) {
   };
   write(path.join(config.llvmDir, "llvm", "LICENSE.TXT"));
   write(path.join(config.hostLlvmDir, "lib", "clang", "23", "include", "__clang_cuda_math.h"));
-  for (const template of ["cmake/wasm32-toolchain.cmake.in"]) {
+  for (const template of ["cmake/toolchain.cmake.in"]) {
     write(path.join(rootDir, template), fs.readFileSync(path.join(projectRoot, template), "utf8"));
   }
   for (const file of ["wasm.hpp", "wasm.cpp", "browser.hpp", "browser.cpp", "tlsf/tlsf.cpp", "tlsf/tlsf.hpp"]) {

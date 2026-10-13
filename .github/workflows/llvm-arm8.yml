@@ -1,0 +1,27 @@
+name: clang-lld-arm8
+
+on:
+  workflow_dispatch:
+    inputs:
+      llvm_version:
+        description: 'LLVM version tag (without "llvmorg-" prefix)'
+        required: true
+        default: '23.1.2'
+        type: string
+
+concurrency:
+  group: llvm-toolchain-release-arm8
+
+jobs:
+  arm8:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/build-target.yml
+    permissions:
+      contents: write
+    with:
+      target: arm8
+      llvm_version: ${{ inputs.llvm_version }}
+      tag_name: clang-${{ inputs.llvm_version }}-arm8
+      verify_commands: |
+        npm run test-arm8
+        npm run test-sysroot -- --target arm8

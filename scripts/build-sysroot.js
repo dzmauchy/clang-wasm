@@ -8,6 +8,7 @@ import { buildSysroot, testSysroot } from "../src/steps/build-sysroot.js";
 try {
   const { values } = parseArgs({
     options: {
+      target: { type: "string" },
       "llvm-version": { type: "string" },
       "llvm-tag": { type: "string" },
       "llvm-dir": { type: "string" },
@@ -23,6 +24,7 @@ try {
   if (values.help) {
     console.log(`Usage: npm run build-sysroot -- [options]
 
+  --target <id>           Target (wasm32 or arm8; defaults to TARGET or wasm32)
   --llvm-version <ver>     LLVM release (defaults to LLVM_VERSION or 23.1.2)
   --llvm-tag <tag>         LLVM source tag (defaults to llvmorg-<version>)
   --llvm-dir <path>        LLVM source directory (defaults to out/llvm-project)
@@ -45,6 +47,7 @@ try {
       explicitHostLlvmDir: values["host-llvm-dir"], version, dryRun,
     });
     const config = resolveBuildConfig({
+      target: values.target,
       rootDir, llvmDir, llvmTag, dryRun,
       hostLlvmDir: host.hostLlvmDir || values["host-llvm-dir"],
       hostClangPath: host.clangPath,

@@ -1,3 +1,4 @@
+#include "browser_target.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
@@ -52,7 +53,7 @@ void printHelp() {
          "  --                     Treat remaining arguments as source paths\n"
          "  -h, --help             Show this help\n"
          "  --version              Show the Clang version\n"
-         "C++23, -O2, -ffreestanding, wasm32-unknown-unknown, /sysroot, "
+         "C++23, -O2, -ffreestanding, " BROWSER_TARGET_TRIPLE ", /sysroot, "
          "/work "
          "includes,\n"
          "and disabled exceptions, RTTI, and threadsafe statics are "
@@ -126,11 +127,11 @@ std::shared_ptr<clang::CompilerInvocation>
 createInvocation(const Options &options) {
   std::vector<std::string> args = {
       "clang",
-      "--target=wasm32-unknown-unknown",
+      "--target=" BROWSER_TARGET_TRIPLE,
+      BROWSER_TARGET_ARGS_INIT
       "--sysroot=/sysroot",
       "-ffreestanding",
       "-nostdinc++",
-      "-fvisibility=default",
       "-resource-dir",
       "/sysroot/lib/clang/23",
       "-fno-exceptions",
@@ -169,7 +170,7 @@ createInvocation(const Options &options) {
   clang::TextDiagnosticPrinter printer(llvm::errs(), diagnosticOptions);
   auto diagnostics = llvm::makeIntrusiveRefCnt<clang::DiagnosticsEngine>(
       clang::DiagnosticIDs::create(), diagnosticOptions, &printer, false);
-  clang::driver::Driver driver("clang", "wasm32-unknown-unknown", *diagnostics);
+  clang::driver::Driver driver("clang", BROWSER_TARGET_TRIPLE, *diagnostics);
   std::unique_ptr<clang::driver::Compilation> compilation(
       driver.BuildCompilation(argv));
   if (!compilation || diagnostics->hasErrorOccurred())

@@ -1,4 +1,4 @@
-name: Build and release LLVM toolchain
+name: clang-lld
 
 on:
   workflow_dispatch:
@@ -13,50 +13,15 @@ concurrency:
   group: llvm-toolchain-release
 
 jobs:
-  build-and-release:
+  wasm32:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-26.04-arm
-    timeout-minutes: 180
+    uses: ./.github/workflows/build-target.yml
     permissions:
       contents: write
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set-up node
-        uses: actions/setup-node@v7
-        with:
-          node-version: latest
-
-      - name: Install sysroot build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build python3 python3-yaml
-
-      - name: Build Clang, LLD and sysroot
-        env:
-          LLVM_VERSION: ${{ inputs.llvm_version }}
-        run: npm run build
-
-      - name: Verify custom browser compiler
-        run: npm run test-clang
-
-      - name: Verify sysroot runtime
-        env:
-          LLVM_VERSION: ${{ inputs.llvm_version }}
-        run: npm run test-sysroot
-
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: clang-${{ inputs.llvm_version }}
-        run: |
-          assets=(dist/clang.js dist/clang.wasm dist/lld.js dist/lld.wasm dist/sysroot.tgz)
-          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$TAG_NAME" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
-          fi
-          echo "Creating release $TAG_NAME..."
-          gh release create "$TAG_NAME" "${assets[@]}" \
-            --latest=false \
-            --target "$GITHUB_SHA" \
-            --title "LLVM $TAG_NAME" \
-            --notes "LLVM toolchain WebAssembly binaries built from llvmorg-${{ inputs.llvm_version }}." \
-            --repo "$GITHUB_REPOSITORY"
+    with:
+      target: wasm32
+      llvm_version: ${{ inputs.llvm_version }}
+      tag_name: clang-${{ inputs.llvm_version }}
+      verify_commands: |
+        npm run test-clang
+        npm run test-sysroot

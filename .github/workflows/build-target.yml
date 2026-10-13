@@ -1,0 +1,75 @@
+name: build-target
+
+# Common build/verify/release pipeline shared by every target workflow.
+# Target specifics live in src/targets/*.js; callers only pick the target id,
+# the LLVM version, the release tag, and which verification commands to run.
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: 'Target id from src/targets (e.g. wasm32, arm8)'
+        required: true
+        type: string
+      llvm_version:
+        description: 'LLVM version (without "llvmorg-" prefix)'
+        required: true
+        type: string
+      tag_name:
+        description: 'Release tag to publish'
+        required: true
+        type: string
+      verify_commands:
+        description: 'Shell commands that verify the built artifacts'
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      LLVM_VERSION: ${{ inputs.llvm_version }}
+      TARGET: ${{ inputs.target }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set-up node
+        uses: actions/setup-node@v7
+        with:
+          node-version: latest
+
+      - name: Install sysroot build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build python3 python3-yaml
+
+      - name: Build Clang, LLD and sysroot
+        run: npm run build -- --target "$TARGET"
+
+      - name: Verify artifacts
+        run: ${{ inputs.verify_commands }}
+
+      - name: Locate artifacts
+        id: dist
+        run: |
+          if [ "$TARGET" = "wasm32" ]; then dir=dist; else dir="dist/$TARGET"; fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          DIST_DIR: ${{ steps.dist.outputs.dir }}
+        run: |
+          assets=("$DIST_DIR/clang.js" "$DIST_DIR/clang.wasm" "$DIST_DIR/lld.js" "$DIST_DIR/lld.wasm" "$DIST_DIR/sysroot.tgz")
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG_NAME" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "Creating release $TAG_NAME..."
+          gh release create "$TAG_NAME" "${assets[@]}" \
+            --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "LLVM $TAG_NAME" \
+            --notes "LLVM toolchain WebAssembly binaries (target: $TARGET) built from llvmorg-$LLVM_VERSION." \
+            --repo "$GITHUB_REPOSITORY"
