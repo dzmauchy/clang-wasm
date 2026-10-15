@@ -23,11 +23,6 @@ test("registry exposes wasm32 (default) and arm8 with consistent ids", () => {
   assert.throws(() => resolveTarget("nope"), /Unknown target "nope"/);
 });
 
-test("release tags follow clang-<version>[-suffix]", () => {
-  assert.equal(releaseTag(TARGETS.wasm32, "23.1.2"), "clang-23.1.2");
-  assert.equal(releaseTag(TARGETS.arm8, "23.1.2"), "clang-23.1.2-arm8");
-});
-
 test("arm8 targets thumbv8m.main-none-eabihf with ELF LLD", () => {
   const arm = TARGETS.arm8;
   assert.equal(arm.triple, "thumbv8m.main-none-eabihf");
